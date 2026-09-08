@@ -12,3 +12,20 @@ readme = "README.md"
 [[bin]]
 name = "rf"
 path = "src/main.rs"
+
+[dependencies]
+# ripgrep's and fd's own guts, linked in-process. This is the whole point of the
+# port: match provenance and file classification are read natively, not
+# reconstructed from a shell pipe's stdout.
+ignore = "0.4"            # fd/ripgrep's walker + .gitignore/.ignore semantics
+grep-regex = "0.1"        # ripgrep's regex matcher
+grep-searcher = "0.1"     # ripgrep's searcher (binary detection, encodings)
+
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.release]
+strip = true
+lto = true
