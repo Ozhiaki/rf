@@ -1,0 +1,14 @@
+[package]
+name = "rf"
+version = "0.0.1"
+edition = "2021"
+description = "rf — an agent-friendly search envelope that fuses ripgrep and fd, with cross-tool stage attribution for false-negative forensics. Early development; see the repository for status."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Ozhiaki/rf"
+keywords = ["ripgrep", "fd", "search", "cli", "grep"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+
+[[bin]]
+name = "rf"
+path = "src/main.rs"
