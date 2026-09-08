@@ -6,6 +6,7 @@
 //! verb emits the universal machine-first envelope; see `capabilities`.
 
 mod capabilities;
+mod conformance;
 mod content;
 mod doctor;
 mod engine;
@@ -60,6 +61,11 @@ enum Verb {
         #[arg(long)]
         json: bool,
     },
+    /// Run the release self-check profile against this binary.
+    Conformance {
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn wants_json(v: &Verb) -> bool {
@@ -67,7 +73,8 @@ fn wants_json(v: &Verb) -> bool {
         Verb::Capabilities { json }
         | Verb::Content { json, .. }
         | Verb::Find { json, .. }
-        | Verb::Doctor { json, .. } => *json,
+        | Verb::Doctor { json, .. }
+        | Verb::Conformance { json } => *json,
     };
     flag || !std::io::stdout().is_terminal()
 }
@@ -80,6 +87,7 @@ fn dispatch(v: &Verb) -> (Value, i32) {
             find::run(pattern, path, name, structural.as_deref(), lang.as_deref())
         }
         Verb::Doctor { path, .. } => doctor::run(path),
+        Verb::Conformance { .. } => conformance::run(),
     }
 }
 
@@ -109,6 +117,26 @@ fn render_human(env: &Value) -> String {
             out.push(format!("rf: {}", d["rf_version"].as_str().unwrap_or("")));
             out.push(format!("engine: {}", d["engine"].as_str().unwrap_or("")));
             out.push(format!("ignore_mode: {}", d["ignore_mode"].as_str().unwrap_or("")));
+        }
+        "conformance" => {
+            let d = &env["data"][0];
+            out.push(format!(
+                "conformance [{}]: {}",
+                d["profile"].as_str().unwrap_or(""),
+                meta["headline"].as_str().unwrap_or("")
+            ));
+            for c in d["cases"].as_array().unwrap_or(&vec![]) {
+                let v = c["verdict"].as_str().unwrap_or("");
+                if v == "pass" {
+                    continue;
+                }
+                out.push(format!(
+                    "  {:<15} {} {}",
+                    c["case_id"].as_str().unwrap_or(""),
+                    v,
+                    c["reason"].as_str().unwrap_or("")
+                ));
+            }
         }
         _ => return serde_json::to_string_pretty(env).unwrap_or_default(),
     }

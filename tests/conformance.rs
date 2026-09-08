@@ -224,6 +224,35 @@ fn conformance() {
           String::new());
     check("capabilities: engine is in-process",
           caps["engine"].as_str().unwrap_or("").contains("in-process"), String::new());
+    check("capabilities: conformance verb advertised (P-f discovery)",
+          caps["verbs"].get("conformance").is_some(), String::new());
+    check("capabilities: error codes registered (X-06)",
+          ["USAGE", "BAD_PATTERN", "INTERNAL"].iter().all(|c| caps["error_codes"].get(*c).is_some()),
+          String::new());
+
+    // --- conformance: the in-situ self-check meets the P-f schema floor ---
+    let (code, e, _) = rf(&["conformance", "--json"], cd, &[]);
+    let d = &e["data"][0];
+    check("conformance: exit 0 with no failures", code == 0 && e["ok"] == true, format!("code={code}"));
+    check("conformance: profile is release-self-check",
+          d["profile"] == "release-self-check", String::new());
+    check("conformance: counts + cases present",
+          d["counts"].get("pass").is_some() && d["counts"].get("fail").is_some()
+              && d["counts"].get("not_applicable").is_some() && d["cases"].is_array(),
+          String::new());
+    let cases = d["cases"].as_array().cloned().unwrap_or_default();
+    check("conformance: every case has the five floor keys",
+          cases.iter().all(|c| ["case_id", "verdict", "reason", "request_id", "target"]
+              .iter().all(|k| c.get(*k).is_some())),
+          String::new());
+    check("conformance: cases sorted by case_id",
+          cases.windows(2).all(|w| w[0]["case_id"].as_str().unwrap_or("") <= w[1]["case_id"].as_str().unwrap_or("")),
+          String::new());
+    check("conformance: no case failed",
+          d["counts"]["fail"].as_i64() == Some(0), format!("{}", d["counts"]["fail"]));
+    check("conformance: not-applicable reasons are non-null",
+          cases.iter().filter(|c| c["verdict"] == "not_applicable").all(|c| c["reason"].is_string()),
+          String::new());
 
     // --- find: four independent sources, each miss attributed to one stage ---
     let fc = FindCorpus::new();
