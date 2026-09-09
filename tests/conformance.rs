@@ -35,6 +35,15 @@ impl Corpus {
         w(".gitignore", b"*.env\n");
         w(".hidden.txt", format!("{TOKEN}\n").as_bytes()); // hidden
         w("blob.dat", format!("pre\0{TOKEN}\n").as_bytes()); // binary (NUL before match)
+        // binary trap #2: NUL (so quit-on-NUL layers abort) THEN a match line
+        // whose bytes are not valid UTF-8 (0xda continuation byte before the
+        // token, then 0x80 after) — the real .pyc string-table shape. Only the
+        // binary layer reaches it, and only a byte-oriented sink reports it: the
+        // UTF8 sink errors on decode and silently drops the match.
+        let mut blob = vec![b'h', b'e', b'a', b'd', 0x00, 0xda];
+        blob.extend_from_slice(TOKEN.as_bytes());
+        blob.extend_from_slice(&[0x80, b'\n']);
+        w("blob_bin.dat", &blob); // binary (non-UTF-8 match line)
         w("lower.txt", TOKEN.to_lowercase().as_bytes()); // case
         // encoding: UTF-16LE, no BOM. rg's UTF-8 assumption + NUL binary-detection
         // miss it entirely; only the forced-decoder probe surfaces it.
@@ -172,7 +181,7 @@ fn conformance() {
     // --- forensic correctness: 5 planted, 1 by default, each layer attributed ---
     let (code, e, _) = rf(&["content", TOKEN, ".", "--json"], cd, &[]);
     check("content: exit 0", code == 0, String::new());
-    check("content: 6 matched", e["meta"]["matched_files"] == 6, format!("{}", e["meta"]));
+    check("content: 7 matched", e["meta"]["matched_files"] == 7, format!("{}", e["meta"]));
     check("content: 1 by default", e["meta"]["default_matched_files"] == 1, format!("{}", e["meta"]));
     let by_file: BTreeMap<String, String> = e["data"]
         .as_array()
@@ -185,6 +194,7 @@ fn conformance() {
         ("secrets.env", "vcs_ignore"),
         (".hidden.txt", "hidden"),
         ("blob.dat", "binary"),
+        ("blob_bin.dat", "binary"),
         ("lower.txt", "case"),
         ("config_utf16.txt", "encoding_utf16"),
     ] {

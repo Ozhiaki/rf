@@ -4,7 +4,7 @@
 //! instead of being reconstructed from a shell pipe in each verb.
 
 use grep_regex::RegexMatcherBuilder;
-use grep_searcher::sinks::UTF8;
+use grep_searcher::sinks::Bytes;
 use grep_searcher::{BinaryDetection, Encoding, SearcherBuilder};
 use ignore::{DirEntry, WalkBuilder};
 use std::collections::BTreeSet;
@@ -89,10 +89,14 @@ pub fn content_matches(root: &str, pattern: &str, cfg: &SearchCfg) -> Result<BTr
             continue;
         }
         let mut hit = false;
+        // Bytes sink, not UTF8: with binary_as_text the searcher reads binary
+        // files (e.g. .pyc), where the matching line routinely holds non-UTF-8
+        // bytes. The UTF8 sink errors on decode and the match is lost; the
+        // Bytes sink takes the raw line, so a binary match is never dropped.
         let _ = searcher.search_path(
             &matcher,
             dent.path(),
-            UTF8(|_lnum, _line| {
+            Bytes(|_lnum, _line| {
                 hit = true;
                 Ok(false) // first match is enough
             }),
