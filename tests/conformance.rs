@@ -324,3 +324,84 @@ fn conformance() {
     println!("\n{}/{} passed", results.len() - fails.len(), results.len());
     assert!(fails.is_empty(), "conformance failures: {fails:?}");
 }
+
+// --- P-e: golden verdict pins ---------------------------------------------
+//
+// The `conformance` test above asserts *structure* (floor keys, sorting, no
+// fail). These two pins assert *instance -> verdict*: the exact machine contract
+// and the exact case->verdict map. They catch silent drift a structural check
+// cannot — a verb quietly added/removed, an exit or error code renamed, a case
+// flipping pass<->fail<->n/a, or an n/a reason string changing.
+//
+// The goldens are generated from real binary output, never hand-written. When a
+// change to either surface is intentional, re-pin (commands below) and commit
+// the new golden as part of that change.
+
+const CAPS_GOLDEN: &str = include_str!("golden/capabilities.data.json");
+const VERDICTS_GOLDEN: &str = include_str!("golden/conformance.verdicts.json");
+
+/// tool_version tracks CARGO_PKG_VERSION and bumps every release; the pin guards
+/// the *contract*, so normalize it out. contract_version stays real — it is the
+/// gate that must move deliberately.
+fn normalize_caps(mut d: Value) -> Value {
+    if let Some(o) = d.as_object_mut() {
+        o.insert("tool_version".into(), Value::from("PINNED"));
+    }
+    d
+}
+
+#[test]
+fn golden_capabilities_contract() {
+    let want: Value = serde_json::from_str(CAPS_GOLDEN).expect("golden parses");
+    let (_, e, _) = rf(&["capabilities", "--json"], None, &[("SOURCE_DATE_EPOCH", "0")]);
+    let got = normalize_caps(e["data"][0].clone());
+    assert!(
+        got == want,
+        "capabilities contract drifted from the golden pin.\n\
+         If this change is intentional, re-pin:\n  \
+         SOURCE_DATE_EPOCH=0 cargo run -q -- capabilities --json \\\n    \
+         | python3 -c \"import sys,json; d=json.load(sys.stdin)['data'][0]; d['tool_version']='PINNED'; \
+print(json.dumps(d,indent=2,sort_keys=True))\" > tests/golden/capabilities.data.json\n\n\
+         observed (normalized):\n{}",
+        serde_json::to_string_pretty(&got).unwrap_or_default()
+    );
+}
+
+#[test]
+fn golden_conformance_verdicts() {
+    let want: Value = serde_json::from_str(VERDICTS_GOLDEN).expect("golden parses");
+    let (_, e, _) = rf(&["conformance", "--json"], None, &[("SOURCE_DATE_EPOCH", "0")]);
+    let p = &e["data"][0];
+    // Project to the pinned shape: request_id is per-host (embeds argv[0]) and
+    // target is derivable from case_id, so neither is pinned; verdict + reason are.
+    let cases: Vec<Value> = p["cases"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|c| {
+            let mut m = serde_json::Map::new();
+            m.insert("case_id".into(), c["case_id"].clone());
+            m.insert("verdict".into(), c["verdict"].clone());
+            m.insert("reason".into(), c["reason"].clone());
+            Value::from(m)
+        })
+        .collect();
+    let mut got = serde_json::Map::new();
+    got.insert("profile".into(), p["profile"].clone());
+    got.insert("counts".into(), p["counts"].clone());
+    got.insert("cases".into(), Value::from(cases));
+    let got = Value::from(got);
+    assert!(
+        got == want,
+        "conformance verdict set drifted from the golden pin.\n\
+         If this change is intentional, re-pin:\n  \
+         SOURCE_DATE_EPOCH=0 cargo run -q -- conformance --json \\\n    \
+         | python3 -c \"import sys,json; p=json.load(sys.stdin)['data'][0]; \
+print(json.dumps({{'profile':p['profile'],'counts':p['counts'],\
+'cases':[{{'case_id':c['case_id'],'verdict':c['verdict'],'reason':c['reason']}} for c in p['cases']]}},\
+indent=2,sort_keys=True))\" > tests/golden/conformance.verdicts.json\n\n\
+         observed:\n{}",
+        serde_json::to_string_pretty(&got).unwrap_or_default()
+    );
+}

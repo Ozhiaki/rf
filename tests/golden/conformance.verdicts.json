@@ -1,0 +1,155 @@
+{
+  "cases": [
+    {
+      "case_id": "B-01::verb=nosuchverb",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-03::flag=--bogus::verb=capabilities",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-03::flag=--bogus::verb=content",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-03::flag=--bogus::verb=doctor",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-03::flag=--bogus::verb=find",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-07::flag=--lang::verb=find",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-07::flag=--name::verb=find",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-07::flag=--structural::verb=find",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "B-13::token=--json",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "H-01",
+      "reason": "rf-requires-a-subcommand",
+      "verdict": "not_applicable"
+    },
+    {
+      "case_id": "H-02::surface=help",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "H-02::surface=version",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "H-03",
+      "reason": "help-surface-not-machine-rendered",
+      "verdict": "not_applicable"
+    },
+    {
+      "case_id": "M-01::shape=envelope::verb=capabilities",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "M-01::shape=envelope::verb=content",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "M-01::shape=envelope::verb=doctor",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "M-01::shape=envelope::verb=find",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "R-01::verb=content",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "R-01::verb=find",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "R-02::verb=find",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "S-01",
+      "reason": "release-build-fault-trigger-unavailable",
+      "verdict": "not_applicable"
+    },
+    {
+      "case_id": "S-02",
+      "reason": "release-build-fault-trigger-unavailable",
+      "verdict": "not_applicable"
+    },
+    {
+      "case_id": "S-03",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "S-04",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "X-01",
+      "reason": "parser-manifest-not-published",
+      "verdict": "not_applicable"
+    },
+    {
+      "case_id": "X-02",
+      "reason": "release-build-fault-trigger-unavailable",
+      "verdict": "not_applicable"
+    },
+    {
+      "case_id": "X-03::posture=compiled-out",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "X-05::verb=conformance",
+      "reason": null,
+      "verdict": "pass"
+    },
+    {
+      "case_id": "X-06",
+      "reason": null,
+      "verdict": "pass"
+    }
+  ],
+  "counts": {
+    "fail": 0,
+    "not_applicable": 6,
+    "pass": 23
+  },
+  "profile": "release-self-check"
+}
