@@ -48,7 +48,6 @@ pub fn build() -> Value {
                 "not_applicable": {
                     "S-01": "release-build-fault-trigger-unavailable",
                     "S-02": "release-build-fault-trigger-unavailable",
-                    "X-01": "parser-manifest-not-published",
                     "X-02": "release-build-fault-trigger-unavailable"
                 },
                 "output_schema": {"data[0]": {"profile": "string", "counts": {"pass": "int", "fail": "int", "not_applicable": "int"}, "cases": "array[{case_id,verdict,reason,request_id,target}]"}}
@@ -82,6 +81,11 @@ pub fn build() -> Value {
     #[cfg(feature = "fault-injection")]
     if let Some(a) = v.get_mut("env_vars").and_then(Value::as_array_mut) {
         a.push(Value::from("RF_FAULT"));
+    }
+    // The parser-derived surface, published as an independent second source. The
+    // conformance verb (X-01) reconciles it against the hand-kept `verbs` above.
+    if let Some(o) = v.as_object_mut() {
+        o.insert("parser_manifest".into(), crate::manifest::build());
     }
     v
 }

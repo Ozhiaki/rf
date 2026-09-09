@@ -337,12 +337,15 @@ fn conformance() {
 // change to either surface is intentional, re-pin (commands below) and commit
 // the new golden as part of that change.
 
+#[cfg(not(feature = "fault-injection"))]
 const CAPS_GOLDEN: &str = include_str!("golden/capabilities.data.json");
+#[cfg(not(feature = "fault-injection"))]
 const VERDICTS_GOLDEN: &str = include_str!("golden/conformance.verdicts.json");
 
 /// tool_version tracks CARGO_PKG_VERSION and bumps every release; the pin guards
 /// the *contract*, so normalize it out. contract_version stays real — it is the
 /// gate that must move deliberately.
+#[cfg(not(feature = "fault-injection"))]
 fn normalize_caps(mut d: Value) -> Value {
     if let Some(o) = d.as_object_mut() {
         o.insert("tool_version".into(), Value::from("PINNED"));

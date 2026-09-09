@@ -45,6 +45,76 @@
       "type": "bool"
     }
   ],
+  "parser_manifest": {
+    "source": "clap parse tree (CommandFactory)",
+    "verbs": {
+      "capabilities": {
+        "flags": [
+          {
+            "arity": 0,
+            "name": "--json"
+          }
+        ],
+        "positionals": []
+      },
+      "conformance": {
+        "flags": [
+          {
+            "arity": 0,
+            "name": "--json"
+          }
+        ],
+        "positionals": []
+      },
+      "content": {
+        "flags": [
+          {
+            "arity": 0,
+            "name": "--json"
+          }
+        ],
+        "positionals": [
+          "path",
+          "pattern"
+        ]
+      },
+      "doctor": {
+        "flags": [
+          {
+            "arity": 0,
+            "name": "--json"
+          }
+        ],
+        "positionals": [
+          "path"
+        ]
+      },
+      "find": {
+        "flags": [
+          {
+            "arity": 0,
+            "name": "--json"
+          },
+          {
+            "arity": 1,
+            "name": "--lang"
+          },
+          {
+            "arity": 1,
+            "name": "--name"
+          },
+          {
+            "arity": 1,
+            "name": "--structural"
+          }
+        ],
+        "positionals": [
+          "path",
+          "pattern"
+        ]
+      }
+    }
+  },
   "tool_version": "PINNED",
   "verbs": {
     "capabilities": {
@@ -64,7 +134,6 @@
       "not_applicable": {
         "S-01": "release-build-fault-trigger-unavailable",
         "S-02": "release-build-fault-trigger-unavailable",
-        "X-01": "parser-manifest-not-published",
         "X-02": "release-build-fault-trigger-unavailable"
       },
       "output_schema": {

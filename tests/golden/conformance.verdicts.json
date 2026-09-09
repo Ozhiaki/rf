@@ -122,8 +122,8 @@
     },
     {
       "case_id": "X-01",
-      "reason": "parser-manifest-not-published",
-      "verdict": "not_applicable"
+      "reason": null,
+      "verdict": "pass"
     },
     {
       "case_id": "X-02",
@@ -148,8 +148,8 @@
   ],
   "counts": {
     "fail": 0,
-    "not_applicable": 6,
-    "pass": 23
+    "not_applicable": 5,
+    "pass": 24
   },
   "profile": "release-self-check"
 }

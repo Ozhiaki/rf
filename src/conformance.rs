@@ -151,6 +151,54 @@ fn is_total_fault(p: &Probe) -> bool {
     p.exit == 3 && p.ok == Some(false) && p.err0.as_deref() == Some("INTERNAL") && p.seven
 }
 
+/// Long-flag names of one verb entry. Reads both the hand shape (a flag is a bare
+/// string or an object with `name`) and the parser-manifest shape (always an
+/// object with `name`), so one helper serves both sides of the X-01 diff.
+fn flag_names(v: &Value) -> BTreeSet<String> {
+    v.get("flags")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|e| match e {
+                    Value::String(s) => Some(s.clone()),
+                    _ => e.get("name").and_then(Value::as_str).map(String::from),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Positional-argument names of one verb. The hand surface lists them under
+/// `args` as objects with `name`; the parser manifest lists them under
+/// `positionals` as bare strings.
+fn positional_names(v: &Value) -> BTreeSet<String> {
+    let from_args = v.get("args").and_then(Value::as_array).map(|a| {
+        a.iter()
+            .filter_map(|e| e.get("name").and_then(Value::as_str).map(String::from))
+            .collect::<BTreeSet<String>>()
+    });
+    let from_pos = v.get("positionals").and_then(Value::as_array).map(|a| {
+        a.iter()
+            .filter_map(|e| e.as_str().map(String::from))
+            .collect::<BTreeSet<String>>()
+    });
+    from_args.or(from_pos).unwrap_or_default()
+}
+
+/// True iff the hand-kept `verbs` surface and the parser-derived manifest agree
+/// on the verb set and, per verb, the long-flag names and positional names.
+fn reconcile(hand: &Map<String, Value>, derived: &Map<String, Value>) -> bool {
+    let hverbs: BTreeSet<&String> = hand.keys().collect();
+    let dverbs: BTreeSet<&String> = derived.keys().collect();
+    if hverbs != dverbs {
+        return false;
+    }
+    hand.iter().all(|(name, hv)| {
+        let dv = &derived[name];
+        flag_names(hv) == flag_names(dv) && positional_names(hv) == positional_names(dv)
+    })
+}
+
 /// Accumulates case rows and the cross-case observations X-06 / S-03 / S-04 need.
 struct Sweep {
     rows: Vec<Value>,
@@ -403,9 +451,19 @@ pub fn run() -> (Value, i32) {
 
     // ---- Group 5: the probe surface ----
 
-    // X-01: a parser-derived manifest is not published; the declared-surface diff
-    // cannot run from the deployed vantage.
-    s.case("X-01", &[], "not_applicable", Some("parser-manifest-not-published"), None);
+    // X-01: reconcile the hand-kept `verbs` surface against the parser-derived
+    // manifest (both published in capabilities). Independent sources for the same
+    // surface; a flag or verb changed on one side only fails here instead of
+    // shipping a contract that disagrees with the real parser.
+    {
+        let hand = caps.get("verbs").and_then(Value::as_object);
+        let derived = caps
+            .get("parser_manifest")
+            .and_then(|m| m.get("verbs"))
+            .and_then(Value::as_object);
+        let pass = matches!((hand, derived), (Some(h), Some(d)) if reconcile(h, d));
+        s.case("X-01", &[], vd(pass), None, None);
+    }
     // X-02: the seam is *per-stage* and total across every stage, not just one.
     // Fold over the declared stage list; each injected fault must be total. Absent
     // the seam (release build), there is nothing to enumerate -> not-applicable.

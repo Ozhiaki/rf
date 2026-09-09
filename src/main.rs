@@ -13,6 +13,7 @@ mod engine;
 mod envelope;
 mod fault;
 mod find;
+mod manifest;
 
 use clap::{Parser, Subcommand};
 use envelope::{envelope, err};
