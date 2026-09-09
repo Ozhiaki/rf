@@ -6,7 +6,8 @@ use crate::envelope::{envelope, CONTRACT_VERSION, TOOL_VERSION};
 use serde_json::{json, Map, Value};
 
 pub fn build() -> Value {
-    json!({
+    #[allow(unused_mut)]
+    let mut v = json!({
         "contract_version": CONTRACT_VERSION,
         "tool_version": TOOL_VERSION,
         "engine": "in-process (ignore + grep crates); no subprocess",
@@ -74,7 +75,15 @@ pub fn build() -> Value {
             "GIT_DELETED", "AST_STRUCTURAL", "STRUCTURAL_UNAVAILABLE", "IGNORE_MODE"
         ],
         "env_vars": ["SOURCE_DATE_EPOCH", "NO_COLOR"]
-    })
+    });
+    // The release contract lists only the two stable vars above; a fault-injection
+    // build additionally reads RF_FAULT, so it discloses that here. This is the one
+    // contract difference between the two builds — the release pin stays canonical.
+    #[cfg(feature = "fault-injection")]
+    if let Some(a) = v.get_mut("env_vars").and_then(Value::as_array_mut) {
+        a.push(Value::from("RF_FAULT"));
+    }
+    v
 }
 
 pub fn run() -> (Value, i32) {

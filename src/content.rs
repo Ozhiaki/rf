@@ -88,6 +88,7 @@ fn matches_for(pattern: &str, path: &str, cfg: &Cfg) -> Result<BTreeSet<String>,
 }
 
 pub fn run(pattern: &str, path: &str) -> (Value, i32) {
+    crate::fault::maybe_fault("content");
     let ls = layers();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut surfaced_by: Vec<(String, String)> = Vec::new(); // (file, layer)

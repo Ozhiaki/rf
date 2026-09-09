@@ -136,6 +136,7 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
             1,
         );
     }
+    crate::fault::maybe_fault("find");
     let ext = name;
     let root = path;
     let relset = |s: BTreeSet<String>| -> BTreeSet<String> { s.into_iter().map(|f| rel(root, &f)).collect() };

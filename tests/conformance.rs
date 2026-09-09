@@ -350,6 +350,10 @@ fn normalize_caps(mut d: Value) -> Value {
     d
 }
 
+// Pinned against the release contract. A fault-injection build discloses RF_FAULT
+// in env_vars and flips several conformance verdicts, so its output is a different
+// (also-honest) contract; the pins guard the canonical release build only.
+#[cfg(not(feature = "fault-injection"))]
 #[test]
 fn golden_capabilities_contract() {
     let want: Value = serde_json::from_str(CAPS_GOLDEN).expect("golden parses");
@@ -367,6 +371,7 @@ print(json.dumps(d,indent=2,sort_keys=True))\" > tests/golden/capabilities.data.
     );
 }
 
+#[cfg(not(feature = "fault-injection"))]
 #[test]
 fn golden_conformance_verdicts() {
     let want: Value = serde_json::from_str(VERDICTS_GOLDEN).expect("golden parses");
@@ -404,4 +409,73 @@ indent=2,sort_keys=True))\" > tests/golden/conformance.verdicts.json\n\n\
          observed:\n{}",
         serde_json::to_string_pretty(&got).unwrap_or_default()
     );
+}
+
+// --- P-d: the per-stage fault-injection seam ------------------------------
+//
+// Two complementary proofs, one per build. The release build proves the seam is
+// truly compiled out (RF_FAULT is inert); the fault-injection build proves the
+// totality wrapper converts a real per-stage panic into a total error envelope.
+// Exactly one runs per `cargo test` invocation, chosen by the feature flag.
+
+/// argv that reaches each stage's seam with otherwise-valid input.
+fn stage_argv(stage: &str) -> Vec<&'static str> {
+    match stage {
+        "content" | "engine" => vec!["content", "zzq_no_such_token", ".", "--json"],
+        "find" => vec!["find", "zzq_no_such_token", ".", "--name", "conf", "--json"],
+        _ => vec!["doctor", ".", "--json"],
+    }
+}
+
+/// Verdict of a single conformance case_id (exact match), or "<absent>".
+fn verdict_of(e: &Value, case_id: &str) -> String {
+    e["data"][0]["cases"]
+        .as_array()
+        .and_then(|cs| cs.iter().find(|c| c["case_id"] == case_id))
+        .and_then(|c| c["verdict"].as_str())
+        .unwrap_or("<absent>")
+        .to_string()
+}
+
+#[cfg(not(feature = "fault-injection"))]
+#[test]
+fn fault_seam_absent_in_release() {
+    // RF_FAULT must be inert: the seam is not compiled in, so a normal search runs.
+    for stage in ["content", "find", "doctor", "engine"] {
+        let (code, e, _) = rf(&stage_argv(stage), None, &[("RF_FAULT", stage)]);
+        assert_eq!(code, 0, "RF_FAULT={stage} should be inert in a release build");
+        assert_eq!(e["ok"], Value::from(true), "RF_FAULT={stage} perturbed output");
+    }
+    // And the self-check reports the totality cases not-applicable, not pass.
+    let (_, e, _) = rf(&["conformance", "--json"], None, &[]);
+    for id in ["S-01", "S-02"] {
+        assert_eq!(verdict_of(&e, id), "not_applicable", "{id} in release build");
+    }
+    assert_eq!(verdict_of(&e, "X-03::posture=compiled-out"), "pass");
+}
+
+#[cfg(feature = "fault-injection")]
+#[test]
+fn fault_seam_proves_totality() {
+    // Injecting a fault at each stage must yield a TOTAL error envelope: the
+    // catch_unwind wrapper turns the panic into exit 3 + INTERNAL + seven keys,
+    // never an unmediated crash (which would be exit 101 with no JSON).
+    for stage in ["content", "find", "doctor", "engine"] {
+        let (code, e, _) = rf(&stage_argv(stage), None, &[("RF_FAULT", stage)]);
+        assert_eq!(code, 3, "stage {stage}: fault must exit 3 (internal), not crash");
+        assert_eq!(e["ok"], Value::from(false), "stage {stage}: ok must be false");
+        assert_eq!(e["errors"][0]["code"], Value::from("INTERNAL"), "stage {stage}");
+        assert!(
+            e.is_object() && KEYS.iter().all(|k| e.get(*k).is_some()),
+            "stage {stage}: envelope lost a key under fault",
+        );
+    }
+    // The in-situ self-check now adjudicates the totality cases for real.
+    let (code, e, _) = rf(&["conformance", "--json"], None, &[]);
+    assert_eq!(code, 0, "self-check must still be all-pass under the seam build");
+    for id in ["S-01::stage=content", "S-02::stage=find", "X-02::stages=all"] {
+        assert_eq!(verdict_of(&e, id), "pass", "{id} should pass with the seam in");
+    }
+    assert_eq!(verdict_of(&e, "X-03"), "not_applicable", "X-03 not release posture");
+    assert_eq!(e["data"][0]["counts"]["fail"], Value::from(0));
 }

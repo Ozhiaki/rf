@@ -11,6 +11,7 @@ mod content;
 mod doctor;
 mod engine;
 mod envelope;
+mod fault;
 mod find;
 
 use clap::{Parser, Subcommand};

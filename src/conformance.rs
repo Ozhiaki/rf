@@ -35,7 +35,24 @@ struct Probe {
 }
 
 fn run_probe(exe: &Path, args: &[&str]) -> Probe {
-    match Command::new(exe).args(args).env("NO_COLOR", "1").output() {
+    run_probe_env(exe, args, None)
+}
+
+/// Run a probe with explicit control over the fault seam. `fault: None` strips any
+/// ambient `RF_FAULT` so a normal probe is never perturbed by the caller's env;
+/// `fault: Some(stage)` sets it, to exercise that stage's injection seam.
+fn run_probe_env(exe: &Path, args: &[&str], fault: Option<&str>) -> Probe {
+    let mut cmd = Command::new(exe);
+    cmd.args(args).env("NO_COLOR", "1");
+    match fault {
+        Some(stage) => {
+            cmd.env("RF_FAULT", stage);
+        }
+        None => {
+            cmd.env_remove("RF_FAULT");
+        }
+    }
+    match cmd.output() {
         Ok(o) => {
             let v: Option<Value> = serde_json::from_slice(&o.stdout).ok();
             let get_str = |path: &[&str]| -> Option<String> {
@@ -113,6 +130,25 @@ fn vd(pass: bool) -> &'static str {
     } else {
         "fail"
     }
+}
+
+/// Argv that reaches a given stage's injection seam with otherwise-valid input,
+/// so the only thing that can fault is the seam itself.
+fn stage_argv(stage: &str) -> Vec<&'static str> {
+    match stage {
+        // content and engine share the content path; engine faults deeper in it.
+        "content" | "engine" => vec!["content", "zzq_no_such_token", ".", "--json"],
+        "find" => vec!["find", "zzq_no_such_token", ".", "--name", "conf", "--json"],
+        "doctor" => vec!["doctor", ".", "--json"],
+        _ => vec!["capabilities", "--json"],
+    }
+}
+
+/// A probe of an injected stage produced a *total* error envelope: the totality
+/// wrapper converted the panic into exit 3 + INTERNAL + the full seven keys,
+/// rather than letting an unmediated crash escape.
+fn is_total_fault(p: &Probe) -> bool {
+    p.exit == 3 && p.ok == Some(false) && p.err0.as_deref() == Some("INTERNAL") && p.seven
 }
 
 /// Accumulates case rows and the cross-case observations X-06 / S-03 / S-04 need.
@@ -312,10 +348,21 @@ pub fn run() -> (Value, i32) {
 
     // ---- Group 3: structural / totality ----
 
-    // S-01, S-02: fault injection. rf compiles out any trigger and declares none,
-    // so these are not-applicable under the release posture.
-    s.case("S-01", &[], "not_applicable", Some("release-build-fault-trigger-unavailable"), None);
-    s.case("S-02", &[], "not_applicable", Some("release-build-fault-trigger-unavailable"), None);
+    // S-01, S-02: per-stage fault injection (P-d). With the seam compiled in,
+    // inject a real fault at a stage and assert the totality wrapper converts the
+    // panic into a total error envelope. With the seam absent (the release build),
+    // there is no trigger to pull, so these stay honestly not-applicable.
+    if crate::fault::SEAM_PRESENT {
+        let p = run_probe_env(&exe, &stage_argv("content"), Some("content"));
+        s.observe(&p);
+        s.case("S-01", &[("stage", "content")], vd(is_total_fault(&p)), None, p.request_id.as_deref());
+        let p = run_probe_env(&exe, &stage_argv("find"), Some("find"));
+        s.observe(&p);
+        s.case("S-02", &[("stage", "find")], vd(is_total_fault(&p)), None, p.request_id.as_deref());
+    } else {
+        s.case("S-01", &[], "not_applicable", Some("release-build-fault-trigger-unavailable"), None);
+        s.case("S-02", &[], "not_applicable", Some("release-build-fault-trigger-unavailable"), None);
+    }
 
     // ---- Group 4: successful special surfaces ----
 
@@ -359,13 +406,29 @@ pub fn run() -> (Value, i32) {
     // X-01: a parser-derived manifest is not published; the declared-surface diff
     // cannot run from the deployed vantage.
     s.case("X-01", &[], "not_applicable", Some("parser-manifest-not-published"), None);
-    // X-02: the per-stage fault seam is a build-time trigger, unavailable here.
-    s.case("X-02", &[], "not_applicable", Some("release-build-fault-trigger-unavailable"), None);
+    // X-02: the seam is *per-stage* and total across every stage, not just one.
+    // Fold over the declared stage list; each injected fault must be total. Absent
+    // the seam (release build), there is nothing to enumerate -> not-applicable.
+    if crate::fault::SEAM_PRESENT {
+        let all_total = crate::fault::STAGES.iter().all(|stage| {
+            let p = run_probe_env(&exe, &stage_argv(stage), Some(stage));
+            let total = is_total_fault(&p);
+            s.observe(&p);
+            total
+        });
+        s.case("X-02", &[("stages", "all")], vd(all_total), None, None);
+    } else {
+        s.case("X-02", &[], "not_applicable", Some("release-build-fault-trigger-unavailable"), None);
+    }
 
-    // X-03: release posture. rf is compiled-out: it declares no test-only trigger
-    // in capabilities.env_vars. Passing means the build has no unreachable live
-    // trigger, which is what lets S-01/S-02/X-02 be honestly not-applicable.
-    {
+    // X-03: release posture. In a release build the seam is compiled out and no
+    // injection trigger is declared in capabilities.env_vars; passing means the
+    // build has no live trigger, which is what lets S-01/S-02/X-02 be honestly
+    // not-applicable. A fault-injection build deliberately violates that posture,
+    // so the release-posture claim does not apply to it.
+    if crate::fault::SEAM_PRESENT {
+        s.case("X-03", &[], "not_applicable", Some("fault-injection-build-not-release-posture"), None);
+    } else {
         let env_vars = caps
             .get("env_vars")
             .and_then(Value::as_array)

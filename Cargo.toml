@@ -13,6 +13,13 @@ readme = "README.md"
 name = "rf"
 path = "src/main.rs"
 
+[features]
+# The per-stage fault-injection seam (probeability rule P-d). OFF by default, so
+# the crates.io release binary carries no injection surface at all. Enable it
+# (`cargo test --features fault-injection`) to prove the totality wrapper converts
+# a real per-stage backend fault into a total error envelope.
+fault-injection = []
+
 [dependencies]
 # ripgrep's and fd's own guts, linked in-process. This is the whole point of the
 # port: match provenance and file classification are read natively, not

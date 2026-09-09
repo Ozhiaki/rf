@@ -23,6 +23,7 @@ fn in_git_work_tree(path: &str) -> bool {
 }
 
 pub fn run(path: &str) -> (Value, i32) {
+    crate::fault::maybe_fault("doctor");
     let in_repo = in_git_work_tree(path);
     let ignore_mode = if in_repo {
         "gitignore-ACTIVE (walker skips ignored+hidden)"

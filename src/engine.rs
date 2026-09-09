@@ -61,6 +61,7 @@ fn walk(root: &str, use_ignore: bool, skip_hidden: bool) -> ignore::Walk {
 /// Files under `root` containing `pattern` under one filter configuration.
 /// Paths keep the walked form (root prefix, `./` stripped); callers relativize.
 pub fn content_matches(root: &str, pattern: &str, cfg: &SearchCfg) -> Result<BTreeSet<String>, String> {
+    crate::fault::maybe_fault("engine");
     let matcher = RegexMatcherBuilder::new()
         .case_insensitive(cfg.case_insensitive)
         .build(pattern)
