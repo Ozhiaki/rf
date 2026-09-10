@@ -222,6 +222,17 @@ fn error_envelopes_and_global_json_are_total() {
 }
 
 #[test]
+fn typo_correction_is_public_unique_and_stops_at_double_dash() {
+    let (_, near, _, _) = rf_with_stderr(&["--json", "capabilitie"], None, &[]);
+    assert_eq!(near["errors"][0]["did_you_mean"], "capabilities");
+    assert_eq!(near["commands"][0], "'rf' 'capabilities'");
+    let (_, far, _, _) = rf_with_stderr(&["--json", "not-even-close"], None, &[]);
+    assert!(far["errors"][0]["did_you_mean"].is_null());
+    let (_, literal, _, _) = rf_with_stderr(&["--json", "content", "--", "--jsno"], None, &[]);
+    assert!(literal["errors"][0]["did_you_mean"].is_null());
+}
+
+#[test]
 fn conformance() {
     let corpus = Corpus::new();
     let cd = Some(corpus.path.as_path());

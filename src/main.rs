@@ -221,7 +221,17 @@ fn main() {
                 ErrorKind::MissingRequiredArgument => "MISSING_ARGUMENT",
                 _ => "USAGE",
             };
-            let env = envelope(false, vec![], meta, vec![], vec![], vec![err(code, "invalid arguments; see --help")]);
+            let rendered = e.to_string();
+            let token = rendered.split('`').nth(1).or_else(|| rendered.split('\'').nth(1));
+            let suggestion = if std::env::args().skip(1).any(|arg| arg == "--") { None } else { token.and_then(manifest::correction) };
+            let mut problem = err(code, "invalid arguments; see --help");
+            if let Some(suggestion) = suggestion {
+                problem.as_object_mut().unwrap().insert("did_you_mean".into(), Value::from(suggestion.clone()));
+                let command = crate::command::shell("rf", &[suggestion]);
+                let env = envelope(false, vec![], meta, vec![], vec![command], vec![problem]);
+                emit(env, 1, json, started);
+            }
+            let env = envelope(false, vec![], meta, vec![], vec![], vec![problem]);
             emit(env, 1, json, started);
         }
     };

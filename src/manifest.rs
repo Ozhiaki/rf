@@ -104,6 +104,32 @@ pub fn public_names() -> BTreeSet<String> {
     names
 }
 
+/// The unique public ASCII name at edit distance one. Ties and distant tokens
+/// deliberately yield no suggestion.
+pub fn correction(token: &str) -> Option<String> {
+    fn distance_one(a: &str, b: &str) -> bool {
+        if !a.is_ascii() || !b.is_ascii() || a == b || a.len().abs_diff(b.len()) > 1 { return false; }
+        let (mut i, mut j, mut edits) = (0, 0, 0);
+        let aa = a.as_bytes(); let bb = b.as_bytes();
+        while i < aa.len() && j < bb.len() {
+            if aa[i] == bb[j] { i += 1; j += 1; } else { edits += 1; if edits > 1 { return false; } if aa.len() > bb.len() { i += 1; } else if bb.len() > aa.len() { j += 1; } else { i += 1; j += 1; } }
+        }
+        edits + (aa.len() - i) + (bb.len() - j) == 1
+    }
+    let matches: Vec<_> = public_names().into_iter().filter(|name| distance_one(token, name)).collect();
+    (matches.len() == 1).then(|| matches[0].clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::correction;
+    #[test]
+    fn correction_requires_one_public_near_match() {
+        assert_eq!(correction("capabilitie").as_deref(), Some("capabilities"));
+        assert_eq!(correction("not-even-close"), None);
+    }
+}
+
 /// Build the manifest by walking clap's full command tree. Global and automatic
 /// flags are declared once at the root; all command entries use full paths.
 pub fn build() -> Value {
