@@ -1,0 +1,17 @@
+# Internal build-automation member. Never published: the root crate's publish
+# include-list anchors to /src, /README.md, /CHANGELOG.md, /LICENSE, /Cargo.*,
+# so this directory is excluded from the crates.io archive by construction, and
+# cargo's manifest normalization strips the [workspace] table from the published
+# package. `publish = false` is a second belt over that suspenders.
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"

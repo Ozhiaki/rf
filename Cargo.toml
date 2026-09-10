@@ -25,6 +25,14 @@ include = [
     "/Cargo.lock",
 ]
 
+# The root package is also the workspace root. `xtask` is an internal build-
+# automation member (the contract guardrail); it is excluded from the published
+# archive by the include-list above and by cargo's normalization, which strips
+# this [workspace] table from the packaged manifest.
+[workspace]
+members = ["xtask"]
+resolver = "2"
+
 [[bin]]
 name = "rf"
 path = "src/main.rs"

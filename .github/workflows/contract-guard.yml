@@ -1,0 +1,24 @@
+name: Contract guard
+
+# Enforces that the crate documentation prose still agrees with the committed
+# release-candidate contract fixture, and that the fixture is not stale before a
+# package is cut. Runs per tree, so this crate tree can go green independently of
+# the site tree.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contract-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Registered claims match the committed fixture
+        run: cargo xtask check
+      - name: Committed fixture is not stale (re-capture from the built binary)
+        run: cargo xtask capture --check
+      - name: Seeded-drift tests
+        run: cargo test --package xtask
