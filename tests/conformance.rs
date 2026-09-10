@@ -6,7 +6,7 @@
 //! .gitignore rules are active), so it depends on no external fixtures.
 
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -287,6 +287,37 @@ fn conformance() {
     check("content: 5 filter warnings", e2["warnings"].as_array().map(|a| a.len()) == Some(5), format!("{}", e2["warnings"]));
     check("content: 5 correction commands", e2["commands"].as_array().map(|a| a.len()) == Some(5), format!("{}", e2["commands"]));
 
+    // --- paging: pages are sorted, snapshot-bound, and never duplicate rows ---
+    let (code, first, _) = rf(&["content", TOKEN, ".", "--limit", "2", "--json"], cd, &[]);
+    check("paging: first page succeeds", code == 0 && first["data"].as_array().map(|a| a.len()) == Some(2), format!("{}", first));
+    check("paging: first page reports truncation", first["meta"]["pagination"]["has_more"] == true && first["meta"]["pagination"]["truncated"] == true, format!("{}", first["meta"]["pagination"]));
+    let snapshot = first["meta"]["pagination"]["snapshot_hash"].as_str().unwrap_or("").to_string();
+    let mut cursor = first["meta"]["pagination"]["cursor"].as_str().unwrap_or("").to_string();
+    let mut paged = first["data"].as_array().cloned().unwrap_or_default();
+    while !cursor.is_empty() {
+        let args = ["content", TOKEN, ".", "--limit", "2", "--cursor", &cursor, "--json"];
+        let (next_code, next, _) = rf(&args, cd, &[]);
+        check("paging: later page succeeds", next_code == 0, format!("{}", next));
+        check("paging: snapshot stays stable", next["meta"]["pagination"]["snapshot_hash"] == snapshot, format!("{}", next["meta"]["pagination"]));
+        paged.extend(next["data"].as_array().cloned().unwrap_or_default());
+        cursor = next["meta"]["pagination"]["cursor"].as_str().unwrap_or("").to_string();
+    }
+    let mut unique = paged.iter().map(|row| row["file"].as_str().unwrap_or("").to_string()).collect::<Vec<_>>();
+    unique.sort();
+    unique.dedup();
+    check("paging: all later pages are complete and unique", paged.len() == 7 && unique.len() == 7, format!("rows={}", paged.len()));
+    check("paging: page data hash differs from snapshot hash", first["meta"]["data_hash"] != snapshot, format!("{}", first["meta"]));
+
+    let first_cursor = first["meta"]["pagination"]["cursor"].as_str().unwrap_or("").to_string();
+    let (mismatch_code, mismatch, _) = rf(&["content", "DIFFERENT_QUERY", ".", "--cursor", &first_cursor, "--json"], cd, &[]);
+    check("paging: query-mismatched cursor is invalid input", mismatch_code == 1 && mismatch["errors"][0]["code"] == "INVALID_INPUT", format!("{}", mismatch));
+    let (bad_code, bad, _) = rf(&["content", TOKEN, ".", "--cursor", "not-a-cursor", "--json"], cd, &[]);
+    check("paging: malformed cursor is invalid input", bad_code == 1 && bad["errors"][0]["code"] == "INVALID_INPUT", format!("{}", bad));
+    std::fs::write(corpus.path.join("changed.txt"), format!("{TOKEN}\n")).unwrap();
+    let (conflict_code, conflict, _) = rf(&["content", TOKEN, ".", "--cursor", &first_cursor, "--json"], cd, &[]);
+    check("paging: changed snapshot returns conflict and restart", conflict_code == 5 && conflict["errors"][0]["code"] == "CONFLICT" && conflict["commands"].as_array().map(|a| a.len()) == Some(1), format!("{}", conflict));
+    check("paging: invalid limit is rejected", rf(&["content", TOKEN, ".", "--limit", "0", "--json"], cd, &[]).1["errors"][0]["code"] == "INVALID_INPUT", String::new());
+
     // --- determinism: byte-identical stdout under a pinned epoch ---
     let a = rf(&["content", TOKEN, ".", "--json"], cd, &[("SOURCE_DATE_EPOCH", "0")]).2;
     let b = rf(&["content", TOKEN, ".", "--json"], cd, &[("SOURCE_DATE_EPOCH", "0")]).2;
@@ -385,6 +416,28 @@ fn conformance() {
     check("find: headline is PARTIAL",
           e["meta"]["headline"].as_str().unwrap_or("").starts_with("PARTIAL"),
           format!("{}", e["meta"]["headline"]));
+    let (find_page_code, find_page, _) = rf(
+        &["find", TOKEN, ".", "--name", "config", "--structural", "db.connect($$$)", "--lang", "python", "--limit", "2", "--json"],
+        fd,
+        &[],
+    );
+    let find_cursor = find_page["meta"]["pagination"]["cursor"].as_str().unwrap_or("").to_string();
+    let (find_next_code, find_next, _) = rf(
+        &["find", TOKEN, ".", "--name", "config", "--structural", "db.connect($$$)", "--lang", "python", "--limit", "2", "--cursor", &find_cursor, "--json"],
+        fd,
+        &[],
+    );
+    let first_files: BTreeSet<String> = find_page["data"].as_array().into_iter().flatten()
+        .filter_map(|row| row["file"].as_str().map(String::from)).collect();
+    let next_files: BTreeSet<String> = find_next["data"].as_array().into_iter().flatten()
+        .filter_map(|row| row["file"].as_str().map(String::from)).collect();
+    check("find paging: page continuation has no duplicate rows",
+          find_page_code == 0 && find_next_code == 0 && first_files.is_disjoint(&next_files),
+          format!("first={first_files:?}, next={next_files:?}"));
+    check("find paging: scanned totals stay complete",
+          find_page["meta"]["content_total"] == e["meta"]["content_total"]
+              && find_page["meta"]["hidden_by_stage"] == e["meta"]["hidden_by_stage"],
+          format!("{}", find_page["meta"]));
 
     // structural source is conditional on ast-grep; both branches must be total
     let warns: Vec<String> = e["warnings"].as_array().unwrap_or(&vec![])

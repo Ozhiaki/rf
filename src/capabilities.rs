@@ -20,8 +20,11 @@ pub fn build() -> Value {
                     {"name": "pattern", "arity": 1, "type": "string"},
                     {"name": "path", "arity": 1, "type": "path", "default": "."}
                 ],
-                "flags": [],
-                "output_schema": {"data[]": {"file": "string", "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"}}
+                "flags": [
+                    {"name": "--limit", "arity": 1, "type": "int", "default": 100, "range": "1..=1000"},
+                    {"name": "--cursor", "arity": 1, "type": "string", "domain": "opaque cursor from meta.pagination.cursor"}
+                ],
+                "output_schema": {"data[]": {"file": "string", "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"}, "meta.pagination": {"limit": "int", "returned": "int", "total": "int", "truncated": "bool", "has_more": "bool", "cursor": "string|null", "snapshot_hash": "sha256"}}
             },
             "find": {
                 "summary": "staged fd|rg pipe (in-process) + git history + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural",
@@ -33,9 +36,11 @@ pub fn build() -> Value {
                 "flags": [
                     {"name": "--name", "arity": 1, "type": "string", "required": true, "value_pattern": "non-empty file extension without dot or path separator"},
                     {"name": "--structural", "arity": 1, "type": "string", "domain": "ast-grep pattern; a construct with no fixed literal form"},
-                    {"name": "--lang", "arity": 1, "type": "string", "domain": "ast-grep language id; required with --structural"}
+                    {"name": "--lang", "arity": 1, "type": "string", "domain": "ast-grep language id; required with --structural"},
+                    {"name": "--limit", "arity": 1, "type": "int", "default": 100, "range": "1..=1000"},
+                    {"name": "--cursor", "arity": 1, "type": "string", "domain": "opaque cursor from meta.pagination.cursor"}
                 ],
-                "output_schema": {"data[]": {"file": "string", "stage": "enum[found,fd_name,fd_hidden,fd_ignore,fd_filter,rg_binary,git_deleted,ast_structural]", "fix": "string|null"}}
+                "output_schema": {"data[]": {"file": "string", "stage": "enum[found,fd_name,fd_hidden,fd_ignore,fd_filter,rg_binary,git_deleted,ast_structural]", "fix": "string|null"}, "meta.pagination": {"limit": "int", "returned": "int", "total": "int", "truncated": "bool", "has_more": "bool", "cursor": "string|null", "snapshot_hash": "sha256"}}
             },
             "doctor": {
                 "summary": "environment DIAGNOSE: engine build, regex features, and the active ignore mode for a path",
@@ -66,6 +71,7 @@ pub fn build() -> Value {
             "0": {"meaning": "success (includes empty results: data:[]); a self-check with no failures", "retryable": false},
             "1": {"meaning": "user-input-error (bad flags / missing args), or a failing conformance self-check", "retryable": false},
             "3": {"meaning": "tool-environment-error", "retryable": false},
+            "5": {"meaning": "conflict: a paged result snapshot changed; restart the query", "retryable": true},
             "6": {"meaning": "internal defect caught by the totality wrapper", "retryable": false}
         },
         "error_codes": {
@@ -75,6 +81,7 @@ pub fn build() -> Value {
             "INVALID_INPUT": "a supplied value failed parser validation",
             "MISSING_ARGUMENT": "a required positional or flag value is absent",
             "BAD_PATTERN": "the search regex failed to compile",
+            "CONFLICT": "a cursor snapshot no longer matches the current result set",
             "INTERNAL": "internal fault caught by the totality wrapper",
             "CONFORMANCE_FAIL": "one or more conformance cases returned verdict:fail"
         },

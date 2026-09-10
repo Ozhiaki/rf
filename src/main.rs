@@ -15,6 +15,7 @@ mod envelope;
 mod fault;
 mod find;
 mod manifest;
+mod pagination;
 
 use clap::{Parser, Subcommand};
 use envelope::{envelope, err};
@@ -54,6 +55,10 @@ enum Verb {
         pattern: String,
         #[arg(default_value = ".")]
         path: String,
+        #[arg(long, default_value_t = pagination::DEFAULT_LIMIT, value_parser = pagination::limit)]
+        limit: usize,
+        #[arg(long)]
+        cursor: Option<String>,
     },
     /// Staged cross-source discovery (port in progress).
     Find {
@@ -67,6 +72,10 @@ enum Verb {
         structural: Option<String>,
         #[arg(long)]
         lang: Option<String>,
+        #[arg(long, default_value_t = pagination::DEFAULT_LIMIT, value_parser = pagination::limit)]
+        limit: usize,
+        #[arg(long)]
+        cursor: Option<String>,
     },
     /// Diagnose the environment and active ignore mode.
     Doctor {
@@ -89,9 +98,9 @@ fn bootstrap_json() -> bool {
 fn dispatch(v: &Verb) -> (Value, i32) {
     match v {
         Verb::Capabilities { .. } => capabilities::run(),
-        Verb::Content { pattern, path, .. } => content::run(pattern, path),
-        Verb::Find { pattern, path, name, structural, lang, .. } => {
-            find::run(pattern, path, name, structural.as_deref(), lang.as_deref())
+        Verb::Content { pattern, path, limit, cursor, .. } => content::run(pattern, path, *limit, cursor.as_deref()),
+        Verb::Find { pattern, path, name, structural, lang, limit, cursor, .. } => {
+            find::run(pattern, path, name, structural.as_deref(), lang.as_deref(), *limit, cursor.as_deref())
         }
         Verb::Doctor { path, .. } => doctor::run(path),
         Verb::Conformance { .. } => conformance::run(),

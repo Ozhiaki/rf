@@ -16,7 +16,7 @@
 
 use crate::engine::{content_matches, SearchCfg};
 use crate::envelope::{envelope, err, warn};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
 
 struct Cfg {
@@ -87,7 +87,7 @@ fn matches_for(pattern: &str, path: &str, cfg: &Cfg) -> Result<BTreeSet<String>,
     )
 }
 
-pub fn run(pattern: &str, path: &str) -> (Value, i32) {
+pub fn run(pattern: &str, path: &str, limit: usize, cursor: Option<&str>) -> (Value, i32) {
     crate::fault::maybe_fault("content");
     let ls = layers();
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -189,5 +189,36 @@ pub fn run(pattern: &str, path: &str) -> (Value, i32) {
         Value::from(total - default_files.len()),
     );
 
-    (envelope(true, data, meta, warnings, commands, vec![]), 0)
+    let query = json!({"verb": "content", "pattern": pattern, "path": path});
+    match crate::pagination::page(data, &query, limit, cursor) {
+        Ok(page) => {
+            let has_more = page.next_cursor.is_some();
+            meta.insert("pagination".into(), json!({
+                "limit": limit,
+                "returned": page.data.len(),
+                "total": page.total,
+                "truncated": has_more,
+                "has_more": has_more,
+                "cursor": page.next_cursor,
+                "snapshot_hash": page.snapshot_hash,
+            }));
+            (envelope(true, page.data, meta, warnings, commands, vec![]), 0)
+        }
+        Err(error) => {
+            let mut failure_meta = Map::new();
+            failure_meta.insert("verb".into(), Value::from("content"));
+            let (code, message, exit, restart) = match error {
+                crate::pagination::Error::InvalidCursor => ("INVALID_INPUT", "cursor is malformed or does not match this query", 1, vec![]),
+                crate::pagination::Error::Conflict => (
+                    "CONFLICT",
+                    "the result snapshot changed; restart the query",
+                    5,
+                    vec![crate::command::shell("rf", &[
+                        "content".into(), "--limit".into(), limit.to_string(), pattern.into(), "--".into(), path.into(),
+                    ])],
+                ),
+            };
+            (envelope(false, vec![], failure_meta, vec![], restart, vec![err(code, message)]), exit)
+        }
+    }
 }

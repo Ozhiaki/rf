@@ -18,6 +18,19 @@ fn sha_hex(input: &str) -> String {
         .collect()
 }
 
+/// Full SHA-256 for a canonical JSON value. Paging cursors use this as an
+/// opaque binding, so no query input or filesystem name appears in the cursor.
+pub fn hash_value(value: &Value) -> String {
+    sha_hex(&serde_json::to_string(value).unwrap_or_default())
+}
+
+/// Full SHA-256 for sorted result rows. The envelope itself publishes a short
+/// form as `meta.data_hash`; snapshot paging needs the full collision-resistant
+/// binding and therefore uses this public helper.
+pub fn hash_data(data: &[Value]) -> String {
+    sha_hex(&format!("{:?}", canonical(data)))
+}
+
 /// Canonical, sorted serialization of the data array. serde_json backs objects
 /// with a BTreeMap (no preserve_order feature), so keys are already sorted; we
 /// only sort the elements against each other. This is the determinism anchor.
@@ -90,10 +103,7 @@ pub fn envelope(
     // measurement. Keeping the key here means every envelope has the same
     // meta floor, including errors made below the dispatcher.
     meta.insert("elapsed_ms".into(), Value::from(0));
-    meta.insert(
-        "data_hash".into(),
-        Value::from(sha_hex(&body_repr)[..12].to_string()),
-    );
+    meta.insert("data_hash".into(), Value::from(hash_data(&data)[..12].to_string()));
     for (k, v) in meta_extra {
         meta.insert(k, v);
     }

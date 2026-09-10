@@ -17,6 +17,7 @@
   ],
   "error_codes": {
     "BAD_PATTERN": "the search regex failed to compile",
+    "CONFLICT": "a cursor snapshot no longer matches the current result set",
     "CONFORMANCE_FAIL": "one or more conformance cases returned verdict:fail",
     "INTERNAL": "internal fault caught by the totality wrapper",
     "INVALID_INPUT": "a supplied value failed parser validation",
@@ -37,6 +38,10 @@
     "3": {
       "meaning": "tool-environment-error",
       "retryable": false
+    },
+    "5": {
+      "meaning": "conflict: a paged result snapshot changed; restart the query",
+      "retryable": true
     },
     "6": {
       "meaning": "internal defect caught by the totality wrapper",
@@ -99,7 +104,18 @@
       },
       "content": {
         "aliases": [],
-        "flags": [],
+        "flags": [
+          {
+            "aliases": [],
+            "arity": 1,
+            "name": "--cursor"
+          },
+          {
+            "aliases": [],
+            "arity": 1,
+            "name": "--limit"
+          }
+        ],
         "path": [
           "content"
         ],
@@ -124,7 +140,17 @@
           {
             "aliases": [],
             "arity": 1,
+            "name": "--cursor"
+          },
+          {
+            "aliases": [],
+            "arity": 1,
             "name": "--lang"
+          },
+          {
+            "aliases": [],
+            "arity": 1,
+            "name": "--limit"
           },
           {
             "aliases": [],
@@ -227,11 +253,34 @@
           "type": "path"
         }
       ],
-      "flags": [],
+      "flags": [
+        {
+          "arity": 1,
+          "default": 100,
+          "name": "--limit",
+          "range": "1..=1000",
+          "type": "int"
+        },
+        {
+          "arity": 1,
+          "domain": "opaque cursor from meta.pagination.cursor",
+          "name": "--cursor",
+          "type": "string"
+        }
+      ],
       "output_schema": {
         "data[]": {
           "file": "string",
           "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"
+        },
+        "meta.pagination": {
+          "cursor": "string|null",
+          "has_more": "bool",
+          "limit": "int",
+          "returned": "int",
+          "snapshot_hash": "sha256",
+          "total": "int",
+          "truncated": "bool"
         }
       },
       "summary": "content search; attributes each match to the filter that would hide it"
@@ -283,6 +332,19 @@
           "domain": "ast-grep language id; required with --structural",
           "name": "--lang",
           "type": "string"
+        },
+        {
+          "arity": 1,
+          "default": 100,
+          "name": "--limit",
+          "range": "1..=1000",
+          "type": "int"
+        },
+        {
+          "arity": 1,
+          "domain": "opaque cursor from meta.pagination.cursor",
+          "name": "--cursor",
+          "type": "string"
         }
       ],
       "output_schema": {
@@ -290,6 +352,15 @@
           "file": "string",
           "fix": "string|null",
           "stage": "enum[found,fd_name,fd_hidden,fd_ignore,fd_filter,rg_binary,git_deleted,ast_structural]"
+        },
+        "meta.pagination": {
+          "cursor": "string|null",
+          "has_more": "bool",
+          "limit": "int",
+          "returned": "int",
+          "snapshot_hash": "sha256",
+          "total": "int",
+          "truncated": "bool"
         }
       },
       "summary": "staged fd|rg pipe (in-process) + git history + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural"

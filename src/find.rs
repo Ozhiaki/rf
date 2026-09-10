@@ -14,7 +14,7 @@
 
 use crate::engine::{content_matches, name_matches, rel, SearchCfg};
 use crate::envelope::{envelope, err, warn};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
@@ -125,7 +125,7 @@ fn file_contains_literal(root: &str, rel_path: &str, needle: &str) -> bool {
     }
 }
 
-pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang: Option<&str>) -> (Value, i32) {
+pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang: Option<&str>, limit: usize, cursor: Option<&str>) -> (Value, i32) {
     // Guard the port keeps stable across the contract: --structural needs --lang.
     if structural.is_some() && lang.is_none() {
         let mut meta = Map::new();
@@ -320,5 +320,39 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     let counts: Map<String, Value> = stage_counts.into_iter().map(|(k, v)| (k, Value::from(v))).collect();
     meta.insert("hidden_by_stage".into(), Value::from(counts));
 
-    (envelope(true, data, meta, warnings, commands, vec![]), 0)
+    let query = json!({
+        "verb": "find", "pattern": pattern, "path": path, "name": name,
+        "structural": structural, "lang": lang,
+    });
+    match crate::pagination::page(data, &query, limit, cursor) {
+        Ok(page) => {
+            let has_more = page.next_cursor.is_some();
+            meta.insert("pagination".into(), json!({
+                "limit": limit,
+                "returned": page.data.len(),
+                "total": page.total,
+                "truncated": has_more,
+                "has_more": has_more,
+                "cursor": page.next_cursor,
+                "snapshot_hash": page.snapshot_hash,
+            }));
+            (envelope(true, page.data, meta, warnings, commands, vec![]), 0)
+        }
+        Err(error) => {
+            let mut failure_meta = Map::new();
+            failure_meta.insert("verb".into(), Value::from("find"));
+            let (code, message, exit, restart) = match error {
+                crate::pagination::Error::InvalidCursor => ("INVALID_INPUT", "cursor is malformed or does not match this query", 1, vec![]),
+                crate::pagination::Error::Conflict => {
+                    let mut args = vec!["find".into(), "--name".into(), name.into()];
+                    if let (Some(structural), Some(lang)) = (structural, lang) {
+                        args.extend(["--structural".into(), structural.into(), "--lang".into(), lang.into()]);
+                    }
+                    args.extend(["--limit".into(), limit.to_string(), pattern.into(), "--".into(), path.into()]);
+                    ("CONFLICT", "the result snapshot changed; restart the query", 5, vec![crate::command::shell("rf", &args)])
+                }
+            };
+            (envelope(false, vec![], failure_meta, vec![], restart, vec![err(code, message)]), exit)
+        }
+    }
 }
