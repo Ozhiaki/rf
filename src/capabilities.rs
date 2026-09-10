@@ -24,10 +24,13 @@ pub fn build() -> Value {
                     {"name": "path", "arity": 1, "type": "path", "default": "."}
                 ],
                 "flags": [
+                    {"name": "--paths-stdin", "arity": 0, "type": "bool", "conflicts_with": "--paths-envelope", "input": "stdin NUL-delimited UTF-8 paths; relative paths resolve under path"},
+                    {"name": "--paths-envelope", "arity": 0, "type": "bool", "conflicts_with": "--paths-stdin", "input": "stdin rf JSON envelope; each data[] row must contain file:string"},
                     {"name": "--limit", "arity": 1, "type": "int", "default": 100, "range": "1..=1000"},
                     {"name": "--cursor", "arity": 1, "type": "string", "domain": "opaque cursor from meta.pagination.cursor"}
                 ],
-                "output_schema": {"data[]": {"file": "string", "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"}, "meta.pagination": {"limit": "int", "returned": "int", "total": "int", "truncated": "bool", "has_more": "bool", "cursor": "string|null", "snapshot_hash": "sha256"}}
+                "selected_input": {"validation": "reject empty, malformed UTF-8/JSON, duplicate, out-of-root, missing, non-file, .git, and unreadable paths", "error_code": "INVALID_SELECTION", "classification": "selected files are classified by content layers; they are never marked recovered"},
+                "output_schema": {"data[]": {"file": "string", "selection": "selected when a selected-input mode is used", "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"}, "meta.selection": {"mode": "enum[root-walk,stdin-nul,rf-envelope]", "selected_files": "int when selected input is used"}, "meta.pagination": {"limit": "int", "returned": "int", "total": "int", "truncated": "bool", "has_more": "bool", "cursor": "string|null", "snapshot_hash": "sha256"}}
             },
             "find": {
                 "summary": "staged fd|rg pipe (in-process) + typed Git history coverage + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural",
@@ -82,6 +85,7 @@ pub fn build() -> Value {
             "UNKNOWN_FLAG": "an unrecognized global or verb-local flag",
             "UNKNOWN_COMMAND": "an unrecognized command path",
             "INVALID_INPUT": "a supplied value failed parser validation",
+            "INVALID_SELECTION": "selected-input bytes or paths failed validation",
             "MISSING_ARGUMENT": "a required positional or flag value is absent",
             "BAD_PATTERN": "the search regex failed to compile",
             "CONFLICT": "a cursor snapshot no longer matches the current result set",

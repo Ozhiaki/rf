@@ -59,6 +59,12 @@ enum Verb {
         pattern: String,
         #[arg(default_value = ".")]
         path: String,
+        /// Read a NUL-delimited selected file list from stdin.
+        #[arg(long, conflicts_with = "paths_envelope")]
+        paths_stdin: bool,
+        /// Read selected files from the data[].file fields of an rf JSON envelope on stdin.
+        #[arg(long, conflicts_with = "paths_stdin")]
+        paths_envelope: bool,
         #[arg(long, default_value_t = pagination::DEFAULT_LIMIT, value_parser = pagination::limit)]
         limit: usize,
         #[arg(long)]
@@ -106,7 +112,16 @@ fn dispatch(v: &Verb) -> (Value, i32) {
     match v {
         Verb::RobotDocs { command: RobotDocs::Guide { compact } } => guide::run(*compact),
         Verb::Capabilities { .. } => capabilities::run(),
-        Verb::Content { pattern, path, limit, cursor, .. } => content::run(pattern, path, *limit, cursor.as_deref()),
+        Verb::Content { pattern, path, paths_stdin, paths_envelope, limit, cursor, .. } => {
+            let selection = if *paths_stdin {
+                Some(content::SelectionMode::NulStdin)
+            } else if *paths_envelope {
+                Some(content::SelectionMode::Envelope)
+            } else {
+                None
+            };
+            content::run(pattern, path, *limit, cursor.as_deref(), selection)
+        }
         Verb::Find { pattern, path, name, structural, lang, limit, cursor, .. } => {
             find::run(pattern, path, name, structural.as_deref(), lang.as_deref(), *limit, cursor.as_deref())
         }

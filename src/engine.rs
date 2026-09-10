@@ -7,7 +7,8 @@ use grep_regex::RegexMatcherBuilder;
 use grep_searcher::sinks::Bytes;
 use grep_searcher::{BinaryDetection, Encoding, SearcherBuilder};
 use ignore::{DirEntry, WalkBuilder};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 /// One filter configuration. `use_ignore`/`skip_hidden` drive the walker;
 /// `binary_as_text`/`case_insensitive`/`encoding` drive the searcher.
@@ -103,6 +104,71 @@ pub fn content_matches(root: &str, pattern: &str, cfg: &SearchCfg) -> Result<BTr
         );
         if hit {
             out.insert(norm(&dent.path().to_string_lossy()));
+        }
+    }
+    Ok(out)
+}
+
+/// Search an already validated, caller-selected file set. The keys are the
+/// stable display paths and the values are the canonical filesystem paths.
+/// This intentionally does not construct a walker: every content layer and
+/// encoding probe operates only on the supplied selection.
+pub fn content_matches_selected(
+    root: &str,
+    pattern: &str,
+    cfg: &SearchCfg,
+    files: &BTreeMap<String, PathBuf>,
+) -> Result<BTreeSet<String>, String> {
+    crate::fault::maybe_fault("engine");
+    let matcher = RegexMatcherBuilder::new()
+        .case_insensitive(cfg.case_insensitive)
+        .build(pattern)
+        .map_err(|e| e.to_string())?;
+
+    let mut sb = SearcherBuilder::new();
+    sb.binary_detection(if cfg.binary_as_text {
+        BinaryDetection::none()
+    } else {
+        BinaryDetection::quit(b'\x00')
+    });
+    if let Some(label) = cfg.encoding {
+        let enc = Encoding::new(label).map_err(|e| format!("bad encoding {label}: {e}"))?;
+        sb.encoding(Some(enc));
+    }
+    let mut searcher = sb.build();
+    let mut out = BTreeSet::new();
+    let selected_by_path: BTreeMap<PathBuf, String> = files
+        .iter()
+        .map(|(display, file)| (file.clone(), display.clone()))
+        .collect();
+    // The walker supplies the same ignore and hidden classification as normal
+    // content search. It never opens or searches a non-selected file.
+    for dent in walk(root, cfg.use_ignore, cfg.skip_hidden) {
+        let dent = match dent {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        if has_git_component(&dent) || !is_file(&dent) {
+            continue;
+        }
+        let canonical = match std::fs::canonicalize(dent.path()) {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
+        let Some(display) = selected_by_path.get(&canonical) else {
+            continue;
+        };
+        let mut hit = false;
+        let _ = searcher.search_path(
+            &matcher,
+            dent.path(),
+            Bytes(|_lnum, _line| {
+                hit = true;
+                Ok(false)
+            }),
+        );
+        if hit {
+            out.insert(display.clone());
         }
     }
     Ok(out)

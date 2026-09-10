@@ -22,6 +22,7 @@
     "HISTORY_ERROR": "Git history could not be scanned; no partial result was returned",
     "INTERNAL": "internal fault caught by the totality wrapper",
     "INVALID_INPUT": "a supplied value failed parser validation",
+    "INVALID_SELECTION": "selected-input bytes or paths failed validation",
     "MISSING_ARGUMENT": "a required positional or flag value is absent",
     "UNKNOWN_COMMAND": "an unrecognized command path",
     "UNKNOWN_FLAG": "an unrecognized global or verb-local flag",
@@ -115,6 +116,16 @@
             "aliases": [],
             "arity": 1,
             "name": "--limit"
+          },
+          {
+            "aliases": [],
+            "arity": 0,
+            "name": "--paths-envelope"
+          },
+          {
+            "aliases": [],
+            "arity": 0,
+            "name": "--paths-stdin"
           }
         ],
         "path": [
@@ -275,6 +286,20 @@
       ],
       "flags": [
         {
+          "arity": 0,
+          "conflicts_with": "--paths-envelope",
+          "input": "stdin NUL-delimited UTF-8 paths; relative paths resolve under path",
+          "name": "--paths-stdin",
+          "type": "bool"
+        },
+        {
+          "arity": 0,
+          "conflicts_with": "--paths-stdin",
+          "input": "stdin rf JSON envelope; each data[] row must contain file:string",
+          "name": "--paths-envelope",
+          "type": "bool"
+        },
+        {
           "arity": 1,
           "default": 100,
           "name": "--limit",
@@ -291,7 +316,12 @@
       "output_schema": {
         "data[]": {
           "file": "string",
+          "selection": "selected when a selected-input mode is used",
           "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"
+        },
+        "meta.selection": {
+          "mode": "enum[root-walk,stdin-nul,rf-envelope]",
+          "selected_files": "int when selected input is used"
         },
         "meta.pagination": {
           "cursor": "string|null",
@@ -302,6 +332,11 @@
           "total": "int",
           "truncated": "bool"
         }
+      },
+      "selected_input": {
+        "classification": "selected files are classified by content layers; they are never marked recovered",
+        "error_code": "INVALID_SELECTION",
+        "validation": "reject empty, malformed UTF-8/JSON, duplicate, out-of-root, missing, non-file, .git, and unreadable paths"
       },
       "summary": "content search; attributes each match to the filter that would hide it"
     },

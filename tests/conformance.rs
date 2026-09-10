@@ -168,6 +168,23 @@ fn rf_with_stderr(
     (out.status.code().unwrap_or(-1), json, stdout, stderr)
 }
 
+fn rf_with_input(args: &[&str], cwd: Option<&Path>, input: &[u8]) -> (i32, Value, String) {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new(BIN)
+        .args(args)
+        .current_dir(cwd.unwrap_or_else(|| Path::new(".")))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn rf");
+    child.stdin.as_mut().unwrap().write_all(input).unwrap();
+    let out = child.wait_with_output().expect("wait rf");
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let json = serde_json::from_str(&stdout).expect("machine output parses");
+    (out.status.code().unwrap_or(-1), json, stdout)
+}
+
 #[test]
 fn error_envelopes_and_global_json_are_total() {
     let corpus = Corpus::new();
@@ -240,6 +257,59 @@ fn workflow_guide_is_declared_and_uses_typed_recipes() {
     assert!(recipes.iter().all(|recipe| ["id", "goal", "inputs", "command", "expected_branch", "version_range"].iter().all(|key| recipe.get(*key).is_some())));
     let (_, caps, _, _) = rf_with_stderr(&["capabilities", "--json"], None, &[]);
     assert!(caps["data"][0]["verbs"]["robot-docs"].is_object());
+}
+
+#[test]
+fn content_selected_input_validates_and_classifies_only_selected_files() {
+    let corpus = Corpus::new();
+    let cwd = Some(corpus.path.as_path());
+    let input = b"src/app.py\0.hidden.txt\0config_utf16.txt\0";
+    let (code, selected, _) = rf_with_input(
+        &["content", TOKEN, ".", "--paths-stdin", "--json"],
+        cwd,
+        input,
+    );
+    assert_eq!(code, 0);
+    assert_eq!(selected["meta"]["selection"]["mode"], "stdin-nul");
+    assert_eq!(selected["meta"]["selection"]["selected_files"], 3);
+    let found = selected["data"].as_array().unwrap();
+    assert_eq!(found.len(), 3);
+    assert!(found.iter().all(|row| row["selection"] == "selected"));
+    assert_eq!(found.iter().find(|row| row["file"] == ".hidden.txt").unwrap()["surfaced_by"], "hidden");
+    assert_eq!(found.iter().find(|row| row["file"] == "config_utf16.txt").unwrap()["surfaced_by"], "encoding_utf16");
+
+    let (_, full, raw) = rf(&["content", TOKEN, ".", "--json"], cwd, &[]);
+    let (envelope_code, from_envelope, _) = rf_with_input(
+        &["content", TOKEN, ".", "--paths-envelope", "--json"],
+        cwd,
+        raw.as_bytes(),
+    );
+    assert_eq!(envelope_code, 0);
+    assert_eq!(from_envelope["meta"]["selection"]["mode"], "rf-envelope");
+    assert_eq!(from_envelope["meta"]["matched_files"], full["meta"]["matched_files"]);
+
+    for input in [
+        b"src/app.py\0src/app.py\0".as_slice(),
+        b"../outside\0".as_slice(),
+        b".git/HEAD\0".as_slice(),
+        b"src/app.py\0\0".as_slice(),
+        b"\xff\0".as_slice(),
+    ] {
+        let (bad_code, bad, _) = rf_with_input(
+            &["content", TOKEN, ".", "--paths-stdin", "--json"],
+            cwd,
+            input,
+        );
+        assert_eq!(bad_code, 1);
+        assert_eq!(bad["errors"][0]["code"], "INVALID_SELECTION");
+    }
+    let (both_code, both, _) = rf_with_input(
+        &["content", TOKEN, ".", "--paths-stdin", "--paths-envelope", "--json"],
+        cwd,
+        b"src/app.py\0",
+    );
+    assert_eq!(both_code, 1);
+    assert_eq!(both["errors"][0]["code"], "USAGE");
 }
 
 #[test]
