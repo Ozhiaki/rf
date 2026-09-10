@@ -43,7 +43,9 @@ invalidates the fixture and forces a re-capture and re-verify before publish.
   fixture's pinned source commit (`aa10addf`) now predates HEAD, so provenance is
   stale even though contract content matches.
 
-Per rf-guy.13's design, the re-capture is batched with any remaining pre-publish
-code change (rf-guy.7) and run once at the final pre-publish capture step
-(rf-guy.12). Until then this fixture stays contract-valid but provenance-stale;
-the publish gate (rf-guy.12) forbids shipping without a fresh capture.
+The re-capture runs once at the final pre-publish capture step (rf-guy.12). It
+re-anchors provenance for `75d34bb` only; the guardrail bead (rf-guy.7) was
+re-sequenced to land after publish, so no further pre-publish code change is
+pending. Until the re-capture, this fixture stays contract-valid but
+provenance-stale; the publish gate (rf-guy.12) forbids shipping without a fresh
+capture.
