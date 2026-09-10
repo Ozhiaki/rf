@@ -33,3 +33,17 @@ at publish time (see the final-package verification step).
 Prose edits (README, CHANGELOG) keep this fixture valid, because they do not
 change what the binary emits. A code or contract change after this capture
 invalidates the fixture and forces a re-capture and re-verify before publish.
+
+## Invalidation log (pending re-capture)
+
+- `75d34bb` (rf-guy.13) — fixed the top-level `--help` workflow-guide line. CLI
+  help text only; the `capabilities` envelope is unchanged (verified: normalized
+  `capabilities --json` is byte-identical to this fixture apart from per-run
+  volatile fields — `request_id`, `ts_iso`, `data_hash`, `elapsed_ms`). This
+  fixture's pinned source commit (`aa10addf`) now predates HEAD, so provenance is
+  stale even though contract content matches.
+
+Per rf-guy.13's design, the re-capture is batched with any remaining pre-publish
+code change (rf-guy.7) and run once at the final pre-publish capture step
+(rf-guy.12). Until then this fixture stays contract-valid but provenance-stale;
+the publish gate (rf-guy.12) forbids shipping without a fresh capture.
