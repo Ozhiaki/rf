@@ -1,0 +1,530 @@
+{
+  "commands": [],
+  "data": [
+    {
+      "contract_version": "2",
+      "diagnosis_order": [
+        "bootstrap_mode",
+        "global_flag",
+        "command_path",
+        "command_flag",
+        "value_validation",
+        "required_argument",
+        "semantic_resolution",
+        "execution"
+      ],
+      "engine": "in-process (ignore + grep crates); no subprocess",
+      "env_vars": [
+        "SOURCE_DATE_EPOCH",
+        "NO_COLOR"
+      ],
+      "error_codes": {
+        "BAD_PATTERN": "the search regex failed to compile",
+        "CONFLICT": "a cursor snapshot no longer matches the current result set",
+        "CONFORMANCE_FAIL": "one or more conformance cases returned verdict:fail",
+        "HISTORY_ERROR": "Git history could not be scanned; no partial result was returned",
+        "INTERNAL": "internal fault caught by the totality wrapper",
+        "INVALID_INPUT": "a supplied value failed parser validation",
+        "INVALID_SELECTION": "selected-input bytes or paths failed validation",
+        "MISSING_ARGUMENT": "a required positional or flag value is absent",
+        "UNKNOWN_COMMAND": "an unrecognized command path",
+        "UNKNOWN_FLAG": "an unrecognized global or verb-local flag",
+        "USAGE": "invalid arguments: unknown verb/flag, missing flag value, or --structural without --lang"
+      },
+      "exit_codes": {
+        "0": {
+          "meaning": "success (includes empty results: data:[]); a self-check with no failures",
+          "retryable": false
+        },
+        "1": {
+          "meaning": "user-input-error (bad flags / missing args), or a failing conformance self-check",
+          "retryable": false
+        },
+        "3": {
+          "meaning": "tool-environment-error",
+          "retryable": false
+        },
+        "5": {
+          "meaning": "conflict: a paged result snapshot changed; restart the query",
+          "retryable": true
+        },
+        "6": {
+          "meaning": "internal defect caught by the totality wrapper",
+          "retryable": false
+        }
+      },
+      "global_flags": [
+        {
+          "aliases": [],
+          "arity": 0,
+          "name": "--json",
+          "positions": "before or after a verb",
+          "summary": "machine envelope",
+          "type": "bool"
+        },
+        {
+          "aliases": [],
+          "arity": 0,
+          "name": "--no-color",
+          "positions": "before or after a verb",
+          "summary": "disable terminal decoration",
+          "type": "bool"
+        },
+        {
+          "aliases": [
+            "-h"
+          ],
+          "arity": 0,
+          "name": "--help",
+          "summary": "usage text; exit 0",
+          "type": "bool"
+        },
+        {
+          "aliases": [
+            "-V"
+          ],
+          "arity": 0,
+          "name": "--version",
+          "summary": "version string; exit 0",
+          "type": "bool"
+        }
+      ],
+      "parser_manifest": {
+        "commands": {
+          "capabilities": {
+            "aliases": [],
+            "flags": [],
+            "path": [
+              "capabilities"
+            ],
+            "positionals": []
+          },
+          "conformance": {
+            "aliases": [],
+            "flags": [],
+            "path": [
+              "conformance"
+            ],
+            "positionals": []
+          },
+          "content": {
+            "aliases": [],
+            "flags": [
+              {
+                "aliases": [],
+                "arity": 1,
+                "name": "--cursor"
+              },
+              {
+                "aliases": [],
+                "arity": 1,
+                "name": "--limit"
+              },
+              {
+                "aliases": [],
+                "arity": 0,
+                "name": "--paths-envelope"
+              },
+              {
+                "aliases": [],
+                "arity": 0,
+                "name": "--paths-stdin"
+              }
+            ],
+            "path": [
+              "content"
+            ],
+            "positionals": [
+              "path",
+              "pattern"
+            ]
+          },
+          "doctor": {
+            "aliases": [],
+            "flags": [],
+            "path": [
+              "doctor"
+            ],
+            "positionals": [
+              "path"
+            ]
+          },
+          "find": {
+            "aliases": [],
+            "flags": [
+              {
+                "aliases": [],
+                "arity": 1,
+                "name": "--cursor"
+              },
+              {
+                "aliases": [],
+                "arity": 1,
+                "name": "--lang"
+              },
+              {
+                "aliases": [],
+                "arity": 1,
+                "name": "--limit"
+              },
+              {
+                "aliases": [],
+                "arity": 1,
+                "name": "--name"
+              },
+              {
+                "aliases": [],
+                "arity": 1,
+                "name": "--structural"
+              }
+            ],
+            "path": [
+              "find"
+            ],
+            "positionals": [
+              "path",
+              "pattern"
+            ]
+          },
+          "robot-docs": {
+            "aliases": [],
+            "flags": [],
+            "path": [
+              "robot-docs"
+            ],
+            "positionals": []
+          },
+          "robot-docs guide": {
+            "aliases": [],
+            "flags": [
+              {
+                "aliases": [],
+                "arity": 0,
+                "name": "--compact"
+              }
+            ],
+            "path": [
+              "robot-docs",
+              "guide"
+            ],
+            "positionals": []
+          }
+        },
+        "global_flags": [
+          {
+            "aliases": [
+              "-h"
+            ],
+            "arity": 0,
+            "name": "--help"
+          },
+          {
+            "aliases": [],
+            "arity": 0,
+            "name": "--json"
+          },
+          {
+            "aliases": [],
+            "arity": 0,
+            "name": "--no-color"
+          },
+          {
+            "aliases": [
+              "-V"
+            ],
+            "arity": 0,
+            "name": "--version"
+          }
+        ],
+        "source": "clap command registry"
+      },
+      "release_scope": {
+        "workflow_guides": [
+          "robot-docs guide"
+        ],
+        "workflow_guides_status": "released in contract version 2"
+      },
+      "tool_version": "0.0.5",
+      "value_domains": [
+        {
+          "accepted": "config",
+          "command": "find",
+          "error_code": "INVALID_INPUT",
+          "flag": "--name",
+          "rejected": ".config"
+        }
+      ],
+      "verbs": {
+        "capabilities": {
+          "aliases": [],
+          "flags": [],
+          "summary": "emit this machine contract"
+        },
+        "conformance": {
+          "aliases": [],
+          "flags": [],
+          "not_applicable": {
+            "S-01": "release-build-fault-trigger-unavailable",
+            "S-02": "release-build-fault-trigger-unavailable",
+            "X-02": "release-build-fault-trigger-unavailable"
+          },
+          "output_schema": {
+            "data[0]": {
+              "cases": "array[{case_id,verdict,reason,request_id,target}]",
+              "counts": {
+                "fail": "int",
+                "not_applicable": "int",
+                "pass": "int"
+              },
+              "profile": "string"
+            }
+          },
+          "profile": "release-self-check",
+          "summary": "run the release self-check profile against this binary and emit the verdict set (probeability rule P-f)"
+        },
+        "content": {
+          "aliases": [],
+          "args": [
+            {
+              "arity": 1,
+              "name": "pattern",
+              "type": "string"
+            },
+            {
+              "arity": 1,
+              "default": ".",
+              "name": "path",
+              "type": "path"
+            }
+          ],
+          "flags": [
+            {
+              "arity": 0,
+              "conflicts_with": "--paths-envelope",
+              "input": "stdin NUL-delimited UTF-8 paths; relative paths resolve under path",
+              "name": "--paths-stdin",
+              "type": "bool"
+            },
+            {
+              "arity": 0,
+              "conflicts_with": "--paths-stdin",
+              "input": "stdin rf JSON envelope; each data[] row must contain file:string",
+              "name": "--paths-envelope",
+              "type": "bool"
+            },
+            {
+              "arity": 1,
+              "default": 100,
+              "name": "--limit",
+              "range": "1..=1000",
+              "type": "int"
+            },
+            {
+              "arity": 1,
+              "domain": "opaque cursor from meta.pagination.cursor",
+              "name": "--cursor",
+              "type": "string"
+            }
+          ],
+          "output_schema": {
+            "data[]": {
+              "file": "string",
+              "selection": "selected when a selected-input mode is used",
+              "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"
+            },
+            "meta.pagination": {
+              "cursor": "string|null",
+              "has_more": "bool",
+              "limit": "int",
+              "returned": "int",
+              "snapshot_hash": "sha256",
+              "total": "int",
+              "truncated": "bool"
+            },
+            "meta.selection": {
+              "mode": "enum[root-walk,stdin-nul,rf-envelope]",
+              "selected_files": "int when selected input is used"
+            }
+          },
+          "selected_input": {
+            "classification": "selected files are classified by content layers; they are never marked recovered",
+            "error_code": "INVALID_SELECTION",
+            "validation": "reject empty, malformed UTF-8/JSON, duplicate, out-of-root, missing, non-file, .git, and unreadable paths"
+          },
+          "summary": "content search; attributes each match to the filter that would hide it"
+        },
+        "doctor": {
+          "aliases": [],
+          "args": [
+            {
+              "arity": 1,
+              "default": ".",
+              "name": "path",
+              "type": "path"
+            }
+          ],
+          "flags": [],
+          "summary": "environment DIAGNOSE: engine build, regex features, and the active ignore mode for a path"
+        },
+        "find": {
+          "aliases": [],
+          "args": [
+            {
+              "arity": 1,
+              "name": "pattern",
+              "type": "string"
+            },
+            {
+              "arity": 1,
+              "default": ".",
+              "name": "path",
+              "type": "path"
+            }
+          ],
+          "flags": [
+            {
+              "arity": 1,
+              "name": "--name",
+              "required": true,
+              "type": "string",
+              "value_pattern": "non-empty file extension without dot or path separator"
+            },
+            {
+              "arity": 1,
+              "domain": "ast-grep pattern; a construct with no fixed literal form",
+              "name": "--structural",
+              "type": "string"
+            },
+            {
+              "arity": 1,
+              "domain": "ast-grep language id; required with --structural",
+              "name": "--lang",
+              "type": "string"
+            },
+            {
+              "arity": 1,
+              "default": 100,
+              "name": "--limit",
+              "range": "1..=1000",
+              "type": "int"
+            },
+            {
+              "arity": 1,
+              "domain": "opaque cursor from meta.pagination.cursor",
+              "name": "--cursor",
+              "type": "string"
+            }
+          ],
+          "output_schema": {
+            "data[]": {
+              "file": "string",
+              "fix": "string|null",
+              "stage": "enum[found,fd_name,fd_hidden,fd_ignore,fd_filter,rg_binary,git_deleted,ast_structural]"
+            },
+            "meta.history": {
+              "actual_mode": "enum[available,git-absent,not-work-tree,partial,history-error]",
+              "budget_ms": 2000,
+              "failed_revisions": "int",
+              "requested_mode": "all-revisions",
+              "served_revisions": "int"
+            },
+            "meta.pagination": {
+              "cursor": "string|null",
+              "has_more": "bool",
+              "limit": "int",
+              "returned": "int",
+              "snapshot_hash": "sha256",
+              "total": "int",
+              "truncated": "bool"
+            }
+          },
+          "summary": "staged fd|rg pipe (in-process) + typed Git history coverage + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural"
+        },
+        "robot-docs": {
+          "aliases": [],
+          "flags": [],
+          "subcommands": {
+            "guide": {
+              "flags": [
+                {
+                  "arity": 0,
+                  "name": "--compact",
+                  "type": "bool"
+                }
+              ],
+              "output_schema": {
+                "data[]": {
+                  "command": "safe shell command",
+                  "expected_branch": "string",
+                  "goal": "string",
+                  "id": "string",
+                  "inputs": "array[string]",
+                  "version_range": "string"
+                }
+              }
+            }
+          },
+          "summary": "agent workflow documents"
+        },
+        "robot-docs guide": {
+          "aliases": [],
+          "flags": [
+            {
+              "arity": 0,
+              "name": "--compact",
+              "type": "bool"
+            }
+          ],
+          "output_schema": {
+            "data[]": {
+              "command": "safe shell command",
+              "expected_branch": "string",
+              "goal": "string",
+              "id": "string",
+              "inputs": "array[string]",
+              "version_range": "string"
+            }
+          },
+          "summary": "emit agent workflow recipes"
+        }
+      },
+      "verification_fixtures": {
+        "content_find_warnings_paging_and_conflicts": "tests/conformance.rs::conformance",
+        "envelope_and_parser_errors": "tests/conformance.rs::error_envelopes_and_global_json_are_total",
+        "history_outcomes": "find::history_tests::history_outcomes_are_distinct_and_coverage_is_counted",
+        "release_self_check_failure": "src/conformance.rs::run",
+        "totality_exit_6": "tests/conformance.rs::fault_seam_proves_totality"
+      },
+      "warning_codes": [
+        "IGNORE_VCS",
+        "HIDDEN_SKIPPED",
+        "BINARY_SKIPPED",
+        "CASE_SENSITIVE",
+        "ENCODING_MISS",
+        "FD_NAME",
+        "FD_HIDDEN",
+        "FD_IGNORE",
+        "RG_BINARY",
+        "GIT_DELETED",
+        "GIT_ABSENT",
+        "GIT_NOT_WORK_TREE",
+        "GIT_HISTORY_PARTIAL",
+        "AST_STRUCTURAL",
+        "STRUCTURAL_UNAVAILABLE",
+        "IGNORE_MODE"
+      ]
+    }
+  ],
+  "errors": [],
+  "meta": {
+    "contract_version": "2",
+    "data_hash": "b5918d313097",
+    "elapsed_ms": 0,
+    "request_id": "8c149a65cf21b6bc",
+    "ts_iso": "2026-09-10T18:38:53Z",
+    "verb": "capabilities"
+  },
+  "ok": true,
+  "tool_version": "0.0.5",
+  "warnings": []
+}
