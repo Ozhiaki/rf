@@ -82,6 +82,9 @@ contract (verbs, flags, exit codes, warning codes).
   same search can answer differently in a scratch dir and a real repo.)
 - **`rf capabilities`** — the machine contract as JSON.
 - **`rf conformance`** — runs the release self-check on this binary.
+- **`rf robot-docs guide`** — agent workflow recipes: ready-to-run command
+  recipes (goal, command, expected branch, version range) an agent can follow.
+  `--compact` emits a terse form.
 
 ## Contract version 2
 
@@ -91,8 +94,9 @@ keys. `content` and `find` return at most 100 rows by default. If
 A changed snapshot returns exit code 5 and a safe restart command.
 
 `find` reports Git history coverage in `meta.history`. Git absent, a non-work-tree,
-partial coverage, and history failure are different outcomes. This release has no
-workflow guide. The capabilities response is the full released command list.
+partial coverage, and history failure are different outcomes. `rf robot-docs guide`
+emits ready-to-run agent workflow recipes. The capabilities response is the full
+released command list.
 
 ## How it works
 
