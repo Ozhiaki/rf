@@ -13,13 +13,16 @@ readme = "README.md"
 # harness, and internal contract-QA fixtures — out of the crates.io archive by
 # construction, so a new internal file cannot leak in later. The `conformance`
 # verb is compiled in and unaffected; only the cargo-test suite stops shipping.
+# Patterns are gitignore-style: a leading "/" anchors to the package root, so a
+# bare "README.md" would also match bench/README.md and internal fixture READMEs.
+# Anchor every entry to ship only the root product surface.
 include = [
-    "src/**/*.rs",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "Cargo.toml",
-    "Cargo.lock",
+    "/src/**/*.rs",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/Cargo.toml",
+    "/Cargo.lock",
 ]
 
 [[bin]]
