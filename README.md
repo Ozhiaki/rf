@@ -36,8 +36,8 @@ content 'timeout' in .: 3 file(s), 1 by default, 2 hidden by filters
   default      config.py
   ! IGNORE_VCS: 1 match(es) hidden by default; add -u (ignore .gitignore/.ignore rules)
   ! HIDDEN_SKIPPED: 1 match(es) hidden by default; add -uu (also search hidden/dotfiles)
-  $ rg -u 'timeout' .
-  $ rg -uu 'timeout' .
+  $ rg -u -e 'timeout' -- '.'
+  $ rg -uu -e 'timeout' -- '.'
 ```
 
 Each miss carries a paste-ready correction. Run at a terminal, `rf` prints the
@@ -81,6 +81,18 @@ contract (verbs, flags, exit codes, warning codes).
   active for the path. (`.gitignore` applies only inside a git work tree, so the
   same search can answer differently in a scratch dir and a real repo.)
 - **`rf capabilities`** — the machine contract as JSON.
+- **`rf conformance`** — runs the release self-check on this binary.
+
+## Contract version 2
+
+Use `rf capabilities --json` before automation. Every response has seven top-level
+keys. `content` and `find` return at most 100 rows by default. If
+`meta.pagination` has a cursor, send it back with `--cursor` for the next page.
+A changed snapshot returns exit code 5 and a safe restart command.
+
+`find` reports Git history coverage in `meta.history`. Git absent, a non-work-tree,
+partial coverage, and history failure are different outcomes. This release has no
+workflow guide. The capabilities response is the full released command list.
 
 ## How it works
 

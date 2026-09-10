@@ -201,6 +201,10 @@
     ],
     "source": "clap command registry"
   },
+  "release_scope": {
+    "workflow_guides": [],
+    "workflow_guides_status": "not released in contract version 2"
+  },
   "tool_version": "PINNED",
   "value_domains": [
     {
@@ -211,6 +215,13 @@
       "rejected": ".config"
     }
   ],
+  "verification_fixtures": {
+    "content_find_warnings_paging_and_conflicts": "tests/conformance.rs::conformance",
+    "envelope_and_parser_errors": "tests/conformance.rs::error_envelopes_and_global_json_are_total",
+    "history_outcomes": "find::history_tests::history_outcomes_are_distinct_and_coverage_is_counted",
+    "release_self_check_failure": "src/conformance.rs::run",
+    "totality_exit_6": "tests/conformance.rs::fault_seam_proves_totality"
+  },
   "verbs": {
     "capabilities": {
       "aliases": [],

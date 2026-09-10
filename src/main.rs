@@ -24,7 +24,7 @@ use std::io::IsTerminal;
 use std::time::Instant;
 
 #[derive(Parser)]
-#[command(name = "rf", version, about = "agent-first forensic search over ripgrep + fd", disable_help_subcommand = true)]
+#[command(name = "rf", version, about = "agent-first forensic search over ripgrep + fd", disable_help_subcommand = true, after_help = "Machine contract: rf capabilities --json\nAutomation: read the JSON envelope before you use a follow-up command.\nExit: 0 success; 1 input error; 3 environment error; 5 snapshot conflict; 6 internal error.\nWorkflow guides: none are released in contract version 2.")]
 struct Cli {
     /// Emit the machine-readable envelope. Accepted before or after a verb.
     #[arg(long, global = true)]

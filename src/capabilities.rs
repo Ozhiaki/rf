@@ -10,6 +10,7 @@ pub fn build() -> Value {
     let mut v = json!({
         "contract_version": CONTRACT_VERSION,
         "tool_version": TOOL_VERSION,
+        "release_scope": {"workflow_guides": [], "workflow_guides_status": "not released in contract version 2"},
         "engine": "in-process (ignore + grep crates); no subprocess",
         "verbs": {
             "capabilities": {"summary": "emit this machine contract", "aliases": [], "flags": []},
@@ -99,6 +100,13 @@ pub fn build() -> Value {
         "value_domains": [
             {"command": "find", "flag": "--name", "accepted": "config", "rejected": ".config", "error_code": "INVALID_INPUT"}
         ],
+        "verification_fixtures": {
+            "envelope_and_parser_errors": "tests/conformance.rs::error_envelopes_and_global_json_are_total",
+            "content_find_warnings_paging_and_conflicts": "tests/conformance.rs::conformance",
+            "history_outcomes": "find::history_tests::history_outcomes_are_distinct_and_coverage_is_counted",
+            "totality_exit_6": "tests/conformance.rs::fault_seam_proves_totality",
+            "release_self_check_failure": "src/conformance.rs::run"
+        },
         "env_vars": ["SOURCE_DATE_EPOCH", "NO_COLOR"]
     });
     // The release contract lists only the two stable vars above; a fault-injection
