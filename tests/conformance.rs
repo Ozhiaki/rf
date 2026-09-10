@@ -509,8 +509,8 @@ indent=2,sort_keys=True))\" > tests/golden/conformance.verdicts.json\n\n\
 /// argv that reaches each stage's seam with otherwise-valid input.
 fn stage_argv(stage: &str) -> Vec<&'static str> {
     match stage {
-        "content" | "engine" => vec!["content", "zzq_no_such_token", ".", "--json"],
-        "find" => vec!["find", "zzq_no_such_token", ".", "--name", "conf", "--json"],
+        "content" | "engine" => vec!["content", "zzq_no_such_token", "/rf-conformance-empty", "--json"],
+        "find" => vec!["find", "zzq_no_such_token", "/rf-conformance-empty", "--name", "conf", "--json"],
         _ => vec!["doctor", ".", "--json"],
     }
 }

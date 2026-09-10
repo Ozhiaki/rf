@@ -1,5 +1,15 @@
 {
-  "contract_version": 1,
+  "contract_version": "2",
+  "diagnosis_order": [
+    "bootstrap_mode",
+    "global_flag",
+    "command_path",
+    "command_flag",
+    "value_validation",
+    "required_argument",
+    "semantic_resolution",
+    "execution"
+  ],
   "engine": "in-process (ignore + grep crates); no subprocess",
   "env_vars": [
     "SOURCE_DATE_EPOCH",
@@ -9,6 +19,10 @@
     "BAD_PATTERN": "the search regex failed to compile",
     "CONFORMANCE_FAIL": "one or more conformance cases returned verdict:fail",
     "INTERNAL": "internal fault caught by the totality wrapper",
+    "INVALID_INPUT": "a supplied value failed parser validation",
+    "MISSING_ARGUMENT": "a required positional or flag value is absent",
+    "UNKNOWN_COMMAND": "an unrecognized command path",
+    "UNKNOWN_FLAG": "an unrecognized global or verb-local flag",
     "USAGE": "invalid arguments: unknown verb/flag, missing flag value, or --structural without --lang"
   },
   "exit_codes": {
@@ -21,11 +35,31 @@
       "retryable": false
     },
     "3": {
-      "meaning": "tool-environment-error / internal",
+      "meaning": "tool-environment-error",
+      "retryable": false
+    },
+    "6": {
+      "meaning": "internal defect caught by the totality wrapper",
       "retryable": false
     }
   },
   "global_flags": [
+    {
+      "aliases": [],
+      "arity": 0,
+      "name": "--json",
+      "positions": "before or after a verb",
+      "summary": "machine envelope",
+      "type": "bool"
+    },
+    {
+      "aliases": [],
+      "arity": 0,
+      "name": "--no-color",
+      "positions": "before or after a verb",
+      "summary": "disable terminal decoration",
+      "type": "bool"
+    },
     {
       "aliases": [
         "-h"
@@ -46,32 +80,28 @@
     }
   ],
   "parser_manifest": {
-    "source": "clap parse tree (CommandFactory)",
-    "verbs": {
+    "commands": {
       "capabilities": {
-        "flags": [
-          {
-            "arity": 0,
-            "name": "--json"
-          }
+        "aliases": [],
+        "flags": [],
+        "path": [
+          "capabilities"
         ],
         "positionals": []
       },
       "conformance": {
-        "flags": [
-          {
-            "arity": 0,
-            "name": "--json"
-          }
+        "aliases": [],
+        "flags": [],
+        "path": [
+          "conformance"
         ],
         "positionals": []
       },
       "content": {
-        "flags": [
-          {
-            "arity": 0,
-            "name": "--json"
-          }
+        "aliases": [],
+        "flags": [],
+        "path": [
+          "content"
         ],
         "positionals": [
           "path",
@@ -79,58 +109,81 @@
         ]
       },
       "doctor": {
-        "flags": [
-          {
-            "arity": 0,
-            "name": "--json"
-          }
+        "aliases": [],
+        "flags": [],
+        "path": [
+          "doctor"
         ],
         "positionals": [
           "path"
         ]
       },
       "find": {
+        "aliases": [],
         "flags": [
           {
-            "arity": 0,
-            "name": "--json"
-          },
-          {
+            "aliases": [],
             "arity": 1,
             "name": "--lang"
           },
           {
+            "aliases": [],
             "arity": 1,
             "name": "--name"
           },
           {
+            "aliases": [],
             "arity": 1,
             "name": "--structural"
           }
+        ],
+        "path": [
+          "find"
         ],
         "positionals": [
           "path",
           "pattern"
         ]
       }
-    }
+    },
+    "global_flags": [
+      {
+        "aliases": [
+          "-h"
+        ],
+        "arity": 0,
+        "name": "--help"
+      },
+      {
+        "aliases": [],
+        "arity": 0,
+        "name": "--json"
+      },
+      {
+        "aliases": [],
+        "arity": 0,
+        "name": "--no-color"
+      },
+      {
+        "aliases": [
+          "-V"
+        ],
+        "arity": 0,
+        "name": "--version"
+      }
+    ],
+    "source": "clap command registry"
   },
   "tool_version": "PINNED",
   "verbs": {
     "capabilities": {
-      "flags": [
-        "--json"
-      ],
+      "aliases": [],
+      "flags": [],
       "summary": "emit this machine contract"
     },
     "conformance": {
-      "flags": [
-        {
-          "arity": 0,
-          "name": "--json",
-          "type": "bool"
-        }
-      ],
+      "aliases": [],
+      "flags": [],
       "not_applicable": {
         "S-01": "release-build-fault-trigger-unavailable",
         "S-02": "release-build-fault-trigger-unavailable",
@@ -151,6 +204,7 @@
       "summary": "run the release self-check profile against this binary and emit the verdict set (probeability rule P-f)"
     },
     "content": {
+      "aliases": [],
       "args": [
         {
           "arity": 1,
@@ -164,13 +218,7 @@
           "type": "path"
         }
       ],
-      "flags": [
-        {
-          "arity": 0,
-          "name": "--json",
-          "type": "bool"
-        }
-      ],
+      "flags": [],
       "output_schema": {
         "data[]": {
           "file": "string",
@@ -180,6 +228,7 @@
       "summary": "content search; attributes each match to the filter that would hide it"
     },
     "doctor": {
+      "aliases": [],
       "args": [
         {
           "arity": 1,
@@ -188,16 +237,11 @@
           "type": "path"
         }
       ],
-      "flags": [
-        {
-          "arity": 0,
-          "name": "--json",
-          "type": "bool"
-        }
-      ],
+      "flags": [],
       "summary": "environment DIAGNOSE: engine build, regex features, and the active ignore mode for a path"
     },
     "find": {
+      "aliases": [],
       "args": [
         {
           "arity": 1,
@@ -230,11 +274,6 @@
           "domain": "ast-grep language id; required with --structural",
           "name": "--lang",
           "type": "string"
-        },
-        {
-          "arity": 0,
-          "name": "--json",
-          "type": "bool"
         }
       ],
       "output_schema": {

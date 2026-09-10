@@ -15,7 +15,7 @@ use crate::capabilities;
 use crate::envelope::{envelope, err};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::Command;
 
@@ -137,31 +137,34 @@ fn vd(pass: bool) -> &'static str {
 fn stage_argv(stage: &str) -> Vec<&'static str> {
     match stage {
         // content and engine share the content path; engine faults deeper in it.
-        "content" | "engine" => vec!["content", "zzq_no_such_token", ".", "--json"],
-        "find" => vec!["find", "zzq_no_such_token", ".", "--name", "conf", "--json"],
+        "content" | "engine" => vec!["content", "zzq_no_such_token", "/rf-conformance-empty", "--json"],
+        "find" => vec!["find", "zzq_no_such_token", "/rf-conformance-empty", "--name", "conf", "--json"],
         "doctor" => vec!["doctor", ".", "--json"],
         _ => vec!["capabilities", "--json"],
     }
 }
 
 /// A probe of an injected stage produced a *total* error envelope: the totality
-/// wrapper converted the panic into exit 3 + INTERNAL + the full seven keys,
+/// wrapper converted the panic into exit 6 + INTERNAL + the full seven keys,
 /// rather than letting an unmediated crash escape.
 fn is_total_fault(p: &Probe) -> bool {
-    p.exit == 3 && p.ok == Some(false) && p.err0.as_deref() == Some("INTERNAL") && p.seven
+    p.exit == 6 && p.ok == Some(false) && p.err0.as_deref() == Some("INTERNAL") && p.seven
 }
 
-/// Long-flag names of one verb entry. Reads both the hand shape (a flag is a bare
-/// string or an object with `name`) and the parser-manifest shape (always an
-/// object with `name`), so one helper serves both sides of the X-01 diff.
-fn flag_names(v: &Value) -> BTreeSet<String> {
+/// Every declared spelling maps to the arity enforced by its source. Comparing
+/// spelling+arity catches aliases and value-taking flags, not only primary names.
+fn flag_arities(v: &Value) -> BTreeMap<String, i64> {
     v.get("flags")
         .and_then(Value::as_array)
         .map(|a| {
             a.iter()
-                .filter_map(|e| match e {
-                    Value::String(s) => Some(s.clone()),
-                    _ => e.get("name").and_then(Value::as_str).map(String::from),
+                .flat_map(|e| {
+                    let arity = e.get("arity").and_then(Value::as_i64).unwrap_or(0);
+                    std::iter::once(&e["name"])
+                        .chain(e["aliases"].as_array().into_iter().flatten())
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .map(move |name| (name, arity))
                 })
                 .collect()
         })
@@ -187,15 +190,22 @@ fn positional_names(v: &Value) -> BTreeSet<String> {
 
 /// True iff the hand-kept `verbs` surface and the parser-derived manifest agree
 /// on the verb set and, per verb, the long-flag names and positional names.
-fn reconcile(hand: &Map<String, Value>, derived: &Map<String, Value>) -> bool {
+fn reconcile(hand: &Map<String, Value>, derived: &Map<String, Value>, hand_globals: &Value, derived_globals: &Value) -> bool {
     let hverbs: BTreeSet<&String> = hand.keys().collect();
     let dverbs: BTreeSet<&String> = derived.keys().collect();
     if hverbs != dverbs {
         return false;
     }
-    hand.iter().all(|(name, hv)| {
+    let globals = |flags: &Value| flag_arities(&Value::Object(
+        [("flags".to_string(), flags.clone())].into_iter().collect(),
+    ));
+    globals(hand_globals) == globals(derived_globals) && hand.iter().all(|(name, hv)| {
         let dv = &derived[name];
-        flag_names(hv) == flag_names(dv) && positional_names(hv) == positional_names(dv)
+        let aliases = |v: &Value| v["aliases"].as_array().into_iter().flatten()
+            .filter_map(Value::as_str).map(String::from).collect::<BTreeSet<_>>();
+        flag_arities(hv) == flag_arities(dv)
+            && positional_names(hv) == positional_names(dv)
+            && aliases(hv) == aliases(dv)
     })
 }
 
@@ -271,7 +281,7 @@ pub fn run() -> (Value, i32) {
                     vec![],
                     vec![err("INTERNAL", format!("cannot resolve own path: {e}"))],
                 ),
-                3,
+                6,
             );
         }
     };
@@ -282,28 +292,28 @@ pub fn run() -> (Value, i32) {
     // Minimal valid argv per verb (a happy path that needs no external corpus).
     let happy: [(&str, Vec<&str>); 4] = [
         ("capabilities", vec!["capabilities", "--json"]),
-        ("content", vec!["content", "zzq_no_such_token", ".", "--json"]),
+        ("content", vec!["content", "zzq_no_such_token", "/rf-conformance-empty", "--json"]),
         (
             "find",
-            vec!["find", "zzq_no_such_token", ".", "--name", "conf", "--json"],
+            vec!["find", "zzq_no_such_token", "/rf-conformance-empty", "--name", "conf", "--json"],
         ),
         ("doctor", vec!["doctor", ".", "--json"]),
     ];
 
     // ---- Group 1: base cases (adjudicated against rf's declared contract) ----
 
-    // B-01: unrecognized verb -> exit 1, ok:false, USAGE, full envelope.
+    // B-01: unrecognized verb -> exit 1, ok:false, UNKNOWN_COMMAND, full envelope.
     {
         let p = run_probe(&exe, &["nosuchverb"]);
         s.observe(&p);
         let pass = p.exit == 1
             && p.ok == Some(false)
-            && p.err0.as_deref() == Some("USAGE")
+            && p.err0.as_deref() == Some("UNKNOWN_COMMAND")
             && p.seven;
         s.case("B-01", &[("verb", "nosuchverb")], vd(pass), None, p.request_id.as_deref());
     }
 
-    // B-03: unrecognized verb-local flag on every verb -> exit 1, USAGE.
+    // B-03: unrecognized verb-local flag on every verb -> exit 1, UNKNOWN_FLAG.
     for (verb, base) in &happy {
         let mut args: Vec<&str> = base.iter().copied().filter(|a| *a != "--json").collect();
         args.push("--bogus");
@@ -311,7 +321,7 @@ pub fn run() -> (Value, i32) {
         s.observe(&p);
         let pass = p.exit == 1
             && p.ok == Some(false)
-            && p.err0.as_deref() == Some("USAGE")
+            && p.err0.as_deref() == Some("UNKNOWN_FLAG")
             && p.seven;
         s.case(
             "B-03",
@@ -322,7 +332,7 @@ pub fn run() -> (Value, i32) {
         );
     }
 
-    // B-07: a value-taking flag as the final token -> exit 1, USAGE. Folds over
+    // B-07: a value-taking flag as the final token -> exit 1, INVALID_INPUT. Folds over
     // find's arity-1 flags.
     let arity1: [(&str, Vec<&str>); 3] = [
         ("--name", vec!["find", "x", ".", "--name"]),
@@ -337,7 +347,7 @@ pub fn run() -> (Value, i32) {
         s.observe(&p);
         let pass = p.exit == 1
             && p.ok == Some(false)
-            && p.err0.as_deref() == Some("USAGE")
+            && p.err0.as_deref() == Some("INVALID_INPUT")
             && p.seven;
         s.case(
             "B-07",
@@ -436,7 +446,7 @@ pub fn run() -> (Value, i32) {
 
     // B-13: a positional whose text is a flag, after `--`, is treated as data.
     {
-        let p = run_probe(&exe, &["content", "--", "--json"]);
+        let p = run_probe(&exe, &["doctor", "--", "--json"]);
         s.observe(&p);
         let pass = p.exit == 0 && p.ok == Some(true) && p.seven;
         s.case("B-13", &[("token", "--json")], vd(pass), None, p.request_id.as_deref());
@@ -457,11 +467,16 @@ pub fn run() -> (Value, i32) {
     // shipping a contract that disagrees with the real parser.
     {
         let hand = caps.get("verbs").and_then(Value::as_object);
-        let derived = caps
-            .get("parser_manifest")
-            .and_then(|m| m.get("verbs"))
+        let manifest = caps.get("parser_manifest");
+        let derived = manifest
+            .and_then(|m| m.get("commands"))
             .and_then(Value::as_object);
-        let pass = matches!((hand, derived), (Some(h), Some(d)) if reconcile(h, d));
+        let pass = matches!((hand, derived, manifest), (Some(h), Some(d), Some(m)) if reconcile(
+            h,
+            d,
+            caps.get("global_flags").unwrap_or(&Value::Null),
+            m.get("global_flags").unwrap_or(&Value::Null),
+        ));
         s.case("X-01", &[], vd(pass), None, None);
     }
     // X-02: the seam is *per-stage* and total across every stage, not just one.
@@ -565,6 +580,11 @@ pub fn run() -> (Value, i32) {
     counts.insert("fail".into(), Value::from(fail));
     counts.insert("not_applicable".into(), Value::from(na));
 
+    let failed_ids: Vec<String> = rows
+        .iter()
+        .filter(|row| row["verdict"] == "fail")
+        .filter_map(|row| row["case_id"].as_str().map(String::from))
+        .collect();
     let mut payload = Map::new();
     payload.insert("profile".into(), Value::from(PROFILE));
     payload.insert("counts".into(), Value::from(counts));
@@ -582,11 +602,46 @@ pub fn run() -> (Value, i32) {
     let errors = if ok {
         vec![]
     } else {
-        vec![err("CONFORMANCE_FAIL", format!("{fail} case(s) returned verdict:fail"))]
+        vec![err(
+            "CONFORMANCE_FAIL",
+            format!("{fail} case(s) returned verdict:fail: {}", failed_ids.join(", ")),
+        )]
     };
     let code = if ok { 0 } else { 1 };
     (
         envelope(ok, vec![Value::from(payload)], meta, vec![], vec![], errors),
         code,
     )
+}
+
+#[cfg(test)]
+mod reconciliation_tests {
+    use super::*;
+
+    #[test]
+    fn x01_rejects_one_sided_command_drift() {
+        let caps = capabilities::build();
+        let hand = caps["verbs"].as_object().unwrap().clone();
+        let manifest = caps["parser_manifest"].clone();
+        let derived = manifest["commands"].as_object().unwrap().clone();
+        let globals = caps["global_flags"].clone();
+        let derived_globals = manifest["global_flags"].clone();
+        assert!(reconcile(&hand, &derived, &globals, &derived_globals));
+
+        let mut parser_only = derived.clone();
+        parser_only.insert("parser-only".into(), Value::Object(Map::new()));
+        assert!(!reconcile(&hand, &parser_only, &globals, &derived_globals));
+
+        let mut capabilities_only = hand.clone();
+        capabilities_only.insert("capabilities-only".into(), Value::Object(Map::new()));
+        assert!(!reconcile(&capabilities_only, &derived, &globals, &derived_globals));
+    }
+
+    #[test]
+    fn manifest_includes_global_aliases_and_is_the_name_source() {
+        let names = crate::manifest::public_names();
+        for name in ["content", "find", "--json", "--no-color", "--help", "-h", "--version", "-V"] {
+            assert!(names.contains(name), "missing parser name {name}");
+        }
+    }
 }

@@ -1,59 +1,139 @@
 //! Parser-derived surface manifest (probeability rule X-01).
 //!
-//! `capabilities` is hand-kept prose: summaries, types, domains, output schemas —
-//! things the parser does not know. This manifest is read straight from clap's
-//! parse tree instead, so the two are *independent* sources describing the same
-//! surface. The conformance verb reconciles them (X-01): a verb or flag added to
-//! the CLI without updating `capabilities`, or removed from one side only, makes
-//! X-01 fail rather than letting the published contract drift from the real
-//! parser. Think double-entry bookkeeping — the hand ledger and the machine
-//! ledger must reconcile or something is wrong.
+//! This is intentionally independent from `capabilities`: it walks clap's live
+//! registry and records every accepted command path, flag spelling, alias, and
+//! positional. Consumers may use its names for parser-derived suggestions; the
+//! conformance verb compares it with the hand-written public contract.
 
-use clap::{ArgAction, CommandFactory};
+use clap::{Arg, ArgAction, Command, CommandFactory};
 use serde_json::{Map, Value};
+use std::collections::BTreeSet;
 
-/// clap adds these to every (sub)command automatically; they are declared once in
-/// capabilities.global_flags, not per verb, so they are not part of the diff.
-fn is_auto(id: &str) -> bool {
-    id == "help" || id == "version"
+fn arity(arg: &Arg) -> i64 {
+    matches!(arg.get_action(), ArgAction::Set | ArgAction::Append) as i64
 }
 
-/// Build the manifest by walking `Cli`'s clap parse tree: each verb's long flags
-/// (with arity) and positional argument names, sorted for determinism.
-pub fn build() -> Value {
-    let cmd = crate::Cli::command();
-    let mut verbs = Map::new();
-    for sub in cmd.get_subcommands() {
-        let mut flags: Vec<Value> = Vec::new();
-        let mut positionals: Vec<String> = Vec::new();
-        for arg in sub.get_arguments() {
-            if is_auto(arg.get_id().as_str()) {
-                continue;
-            }
-            if arg.is_positional() {
-                positionals.push(arg.get_id().as_str().to_string());
-            } else if let Some(long) = arg.get_long() {
-                // num_args is not populated on an un-built Command, so derive arity
-                // from the action: only Set/Append consume a value.
-                let arity = matches!(arg.get_action(), ArgAction::Set | ArgAction::Append) as i64;
-                let mut m = Map::new();
-                m.insert("name".into(), Value::from(format!("--{long}")));
-                m.insert("arity".into(), Value::from(arity));
-                flags.push(Value::from(m));
+fn spellings(arg: &Arg) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    if let Some(long) = arg.get_long() {
+        names.insert(format!("--{long}"));
+    }
+    for alias in arg.get_all_aliases().unwrap_or_default() {
+        names.insert(format!("--{alias}"));
+    }
+    if let Some(short) = arg.get_short() {
+        names.insert(format!("-{short}"));
+    }
+    for alias in arg.get_all_short_aliases().unwrap_or_default() {
+        names.insert(format!("-{alias}"));
+    }
+    names.into_iter().collect()
+}
+
+fn flag(arg: &Arg) -> Value {
+    let names = spellings(arg);
+    let mut m = Map::new();
+    m.insert("name".into(), Value::from(names.first().cloned().unwrap_or_default()));
+    m.insert(
+        "aliases".into(),
+        Value::from(names.into_iter().skip(1).map(Value::from).collect::<Vec<_>>()),
+    );
+    m.insert("arity".into(), Value::from(arity(arg)));
+    Value::from(m)
+}
+
+fn walk(command: &Command, parent: &[String], commands: &mut Map<String, Value>) {
+    let mut path = parent.to_vec();
+    path.push(command.get_name().to_string());
+    let path_name = path.join(" ");
+    let mut flags = Vec::new();
+    let mut positionals = Vec::new();
+    for arg in command.get_arguments() {
+        if arg.is_positional() {
+            positionals.push(arg.get_id().as_str().to_string());
+        } else if !arg.is_global_set() && !matches!(arg.get_id().as_str(), "help" | "version") {
+            flags.push(flag(arg));
+        }
+    }
+    flags.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    positionals.sort();
+    let mut aliases: Vec<String> = command.get_all_aliases().map(String::from).collect();
+    aliases.sort();
+    let mut entry = Map::new();
+    entry.insert("path".into(), Value::from(path.clone()));
+    entry.insert("aliases".into(), Value::from(aliases));
+    entry.insert("flags".into(), Value::from(flags));
+    entry.insert(
+        "positionals".into(),
+        Value::from(positionals.into_iter().map(Value::from).collect::<Vec<_>>()),
+    );
+    commands.insert(path_name, Value::from(entry));
+    for sub in command.get_subcommands() {
+        walk(sub, &path, commands);
+    }
+}
+
+/// All parser-accepted public names. This is the only name source for future
+/// typo correction and recipe validation; it never duplicates a hand list.
+#[allow(dead_code)]
+pub fn public_names() -> BTreeSet<String> {
+    let manifest = build();
+    let mut names = BTreeSet::new();
+    for flag in manifest["global_flags"].as_array().into_iter().flatten() {
+        for name in std::iter::once(&flag["name"]).chain(flag["aliases"].as_array().into_iter().flatten()) {
+            if let Some(name) = name.as_str() {
+                names.insert(name.to_string());
             }
         }
-        positionals.sort();
-        flags.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
-        let mut vm = Map::new();
-        vm.insert("flags".into(), Value::from(flags));
-        vm.insert(
-            "positionals".into(),
-            Value::from(positionals.into_iter().map(Value::from).collect::<Vec<_>>()),
-        );
-        verbs.insert(sub.get_name().to_string(), Value::from(vm));
+    }
+    for (path, command) in manifest["commands"].as_object().into_iter().flatten() {
+        names.insert(path.clone());
+        for alias in command["aliases"].as_array().into_iter().flatten() {
+            if let Some(alias) = alias.as_str() {
+                names.insert(alias.to_string());
+            }
+        }
+        for flag in command["flags"].as_array().into_iter().flatten() {
+            for name in std::iter::once(&flag["name"]).chain(flag["aliases"].as_array().into_iter().flatten()) {
+                if let Some(name) = name.as_str() {
+                    names.insert(name.to_string());
+                }
+            }
+        }
+    }
+    names
+}
+
+/// Build the manifest by walking clap's full command tree. Global and automatic
+/// flags are declared once at the root; all command entries use full paths.
+pub fn build() -> Value {
+    let mut cmd = crate::Cli::command();
+    // clap adds its automatic help/version arguments during build.
+    cmd.build();
+    let mut global_flags: Vec<Value> = cmd
+        .get_arguments()
+        .filter(|arg| !arg.is_positional())
+        .map(flag)
+        .collect();
+    // clap synthesizes help/version on each subcommand, not at the root. They
+    // are nevertheless global grammar, so derive their spellings from the
+    // live subcommand registry and publish them once.
+    for sub in cmd.get_subcommands() {
+        for arg in sub.get_arguments().filter(|arg| matches!(arg.get_id().as_str(), "help" | "version")) {
+            let candidate = flag(arg);
+            if !global_flags.iter().any(|existing| existing["name"] == candidate["name"]) {
+                global_flags.push(candidate);
+            }
+        }
+    }
+    global_flags.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    let mut commands = Map::new();
+    for sub in cmd.get_subcommands() {
+        walk(sub, &[], &mut commands);
     }
     let mut root = Map::new();
-    root.insert("source".into(), Value::from("clap parse tree (CommandFactory)"));
-    root.insert("verbs".into(), Value::from(verbs));
+    root.insert("source".into(), Value::from("clap command registry"));
+    root.insert("global_flags".into(), Value::from(global_flags));
+    root.insert("commands".into(), Value::from(commands));
     Value::from(root)
 }
