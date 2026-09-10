@@ -531,6 +531,24 @@ pub fn run() -> (Value, i32) {
         s.case("X-06", &[], vd(exits_ok && errs_ok), None, None);
     }
 
+    // X-07: value-domain probes are generated from the hand-declared domain
+    // registry. Each entry supplies one accepted and one rejected value.
+    for domain in caps["value_domains"].as_array().into_iter().flatten() {
+        let command = domain["command"].as_str().unwrap_or("");
+        let flag = domain["flag"].as_str().unwrap_or("");
+        let accepted = domain["accepted"].as_str().unwrap_or("");
+        let rejected = domain["rejected"].as_str().unwrap_or("");
+        let error_code = domain["error_code"].as_str().unwrap_or("INVALID_INPUT");
+        let accepted_args = [command, "zzq_no_such_token", "/rf-conformance-empty", flag, accepted, "--json"];
+        let rejected_args = [command, "zzq_no_such_token", "/rf-conformance-empty", flag, rejected, "--json"];
+        let good = run_probe(&exe, &accepted_args);
+        let bad = run_probe(&exe, &rejected_args);
+        s.observe(&good);
+        s.observe(&bad);
+        s.case("X-07", &[("flag", flag), ("value", "accepted")], vd(good.exit == 0 && good.ok == Some(true) && good.seven), None, good.request_id.as_deref());
+        s.case("X-07", &[("flag", flag), ("value", "rejected")], vd(bad.exit == 1 && bad.ok == Some(false) && bad.err0.as_deref() == Some(error_code) && bad.seven), None, bad.request_id.as_deref());
+    }
+
     // X-05: this verb's own result meets the floor. Adjudicated on the rows built
     // so far: each carries the five required keys, and target agrees with case_id.
     {

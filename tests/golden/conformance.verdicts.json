@@ -3,7 +3,7 @@
   "counts": {
     "fail": 0,
     "not_applicable": 5,
-    "pass": 24
+    "pass": 26
   },
   "cases": [
     {
@@ -148,6 +148,16 @@
     },
     {
       "case_id": "X-06",
+      "verdict": "pass",
+      "reason": null
+    },
+    {
+      "case_id": "X-07::flag=--name::value=accepted",
+      "verdict": "pass",
+      "reason": null
+    },
+    {
+      "case_id": "X-07::flag=--name::value=rejected",
       "verdict": "pass",
       "reason": null
     }

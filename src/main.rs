@@ -35,6 +35,14 @@ struct Cli {
     verb: Verb,
 }
 
+fn extension(value: &str) -> Result<String, String> {
+    if value.is_empty() || value.contains('.') || value.contains('/') || value.contains('\\') {
+        Err("file extension must be non-empty and contain no dot or path separator".into())
+    } else {
+        Ok(value.into())
+    }
+}
+
 #[derive(Subcommand)]
 enum Verb {
     /// Emit the machine contract.
@@ -52,6 +60,7 @@ enum Verb {
         #[arg(default_value = ".")]
         path: String,
         #[arg(long)]
+        #[arg(value_parser = extension)]
         name: String,
         #[arg(long)]
         structural: Option<String>,

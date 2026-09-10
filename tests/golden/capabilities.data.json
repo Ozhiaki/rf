@@ -175,6 +175,15 @@
     "source": "clap command registry"
   },
   "tool_version": "PINNED",
+  "value_domains": [
+    {
+      "accepted": "config",
+      "command": "find",
+      "error_code": "INVALID_INPUT",
+      "flag": "--name",
+      "rejected": ".config"
+    }
+  ],
   "verbs": {
     "capabilities": {
       "aliases": [],
@@ -258,10 +267,10 @@
       "flags": [
         {
           "arity": 1,
-          "domain": "file extension, no dot",
           "name": "--name",
           "required": true,
-          "type": "string"
+          "type": "string",
+          "value_pattern": "non-empty file extension without dot or path separator"
         },
         {
           "arity": 1,

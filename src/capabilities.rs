@@ -31,7 +31,7 @@ pub fn build() -> Value {
                     {"name": "path", "arity": 1, "type": "path", "default": "."}
                 ],
                 "flags": [
-                    {"name": "--name", "arity": 1, "type": "string", "required": true, "domain": "file extension, no dot"},
+                    {"name": "--name", "arity": 1, "type": "string", "required": true, "value_pattern": "non-empty file extension without dot or path separator"},
                     {"name": "--structural", "arity": 1, "type": "string", "domain": "ast-grep pattern; a construct with no fixed literal form"},
                     {"name": "--lang", "arity": 1, "type": "string", "domain": "ast-grep language id; required with --structural"}
                 ],
@@ -86,6 +86,9 @@ pub fn build() -> Value {
         "diagnosis_order": [
             "bootstrap_mode", "global_flag", "command_path", "command_flag",
             "value_validation", "required_argument", "semantic_resolution", "execution"
+        ],
+        "value_domains": [
+            {"command": "find", "flag": "--name", "accepted": "config", "rejected": ".config", "error_code": "INVALID_INPUT"}
         ],
         "env_vars": ["SOURCE_DATE_EPOCH", "NO_COLOR"]
     });
