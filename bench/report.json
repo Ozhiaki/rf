@@ -1,0 +1,23 @@
+{
+  "arms": {
+    "feature_off": {
+      "correctness": 1.0,
+      "failed_invocations": [0, 0],
+      "failures": [],
+      "turns": [1, 2]
+    },
+    "feature_on": {
+      "correctness": 1.0,
+      "failed_invocations": [0, 0],
+      "failures": [],
+      "turns": [1, 1]
+    }
+  },
+  "guards": {
+    "correctness_delta": 0.0,
+    "failed_call_delta": 0.0,
+    "pass": true
+  },
+  "records": 4,
+  "source_revision": "6b18904ddd28781aafeed76d79ea05871214b0e7"
+}

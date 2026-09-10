@@ -1,0 +1,4 @@
+{"arm":"feature_on","task_id":"hidden-and-ignored","turns":1,"failed_invocations":0,"correct":true,"outcome":"success","elapsed_seconds":0,"found_paths":["blob.dat","blob_bin.dat","lower.txt","src/app.py","config_utf16.txt",".hidden.txt","secrets.env"]}
+{"arm":"feature_off","task_id":"hidden-and-ignored","turns":2,"failed_invocations":[],"correct":true,"outcome":"success","elapsed_seconds":0,"found_paths":["./.hidden.txt","./blob.dat","./blob_bin.dat","./config_utf16.txt","./lower.txt","./secrets.env","./src/app.py"]}
+{"arm":"feature_on","task_id":"history-coverage","turns":1,"failed_invocations":0,"correct":true,"outcome":"success","elapsed_seconds":8.025,"found_paths":["history.config"]}
+{"arm":"feature_off","task_id":"history-coverage","turns":1,"failed_invocations":0,"correct":true,"outcome":"success","elapsed_seconds":1.536,"found_paths":["history.config"]}

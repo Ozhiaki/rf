@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "source_revision": "6b18904ddd28781aafeed76d79ea05871214b0e7",
+  "fixture_id": "forensic-search-v1",
+  "model": "gpt-5.5",
+  "reasoning_effort": "medium",
+  "seed": 20260910,
+  "timeout_seconds": 120,
+  "turn_limit": 12,
+  "arms": {
+    "feature_off": ["rg", "fd", "git"],
+    "feature_on": ["rf", "rg", "fd", "git"]
+  },
+  "tasks": [
+    {"id": "hidden-and-ignored", "prompt": "Find every occurrence of MAGIC_TOKEN_XYZ and state why a normal search missed each file.", "ground_truth": ["src/app.py", ".hidden.txt", "secrets.env", "blob.dat", "blob_bin.dat", "lower.txt", "config_utf16.txt"]},
+    {"id": "history-coverage", "prompt": "Find a token removed from the current tree and report the history coverage state.", "ground_truth": ["history.config"]}
+  ],
+  "reset": "Create a new fixture directory for each arm and task. Do not reuse command output or conversation state.",
+  "adoption_guards": {"minimum_correctness_delta": 0.0, "maximum_failed_call_delta": 0.0}
+}
