@@ -196,7 +196,7 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
                 ("fd_filter", Some("peel fd filters (fd -u)".into()))
             }
         } else {
-            ("fd_name", Some(format!("widen name filter (matches '{pattern}' but not *.{ext})")))
+            ("fd_name", Some(format!("widen name filter (the content match is outside *.{ext})")))
         };
         data.push(row(f, stage, fix));
         bump(&mut stage_counts, stage);
@@ -208,7 +208,7 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     let mut scrub_commits: BTreeMap<String, String> = BTreeMap::new();
     for f in &git_deleted {
         scrub_commits.insert(f.clone(), git_scrub_commit(pattern, root, f));
-        data.push(row(f, "git_deleted", Some(format!("recover from history: git log -S{pattern} -- {f}"))));
+        data.push(row(f, "git_deleted", Some("recover the file from Git history".into())));
         bump(&mut stage_counts, "git_deleted");
     }
 
@@ -231,7 +231,7 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
                 data.push(row(
                     f,
                     "ast_structural",
-                    Some(format!("literal search finds 0; match is structural: ast-grep run -p '{sp}' -l {lg} .")),
+                    Some("literal search finds 0; use the structural correction command".into()),
                 ));
                 bump(&mut stage_counts, "ast_structural");
             }
@@ -288,21 +288,21 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     let mut commands: Vec<String> = Vec::new();
     let has = |s: &str| missed.iter().any(|d| d["stage"] == s);
     if has("fd_hidden") || has("fd_ignore") || has("fd_filter") {
-        commands.push(format!("fd -u -e {ext} . | xargs rg -a '{pattern}'"));
+        commands.push(crate::command::pipe_fd_to_rg(ext, pattern, root, &["-u"], &["-a"]));
     }
     if has("fd_name") {
-        commands.push(format!("rg -uu '{pattern}'   # drop the name filter"));
+        commands.push(crate::command::shell("rg", &["-uu".into(), "-e".into(), pattern.into(), "--".into(), root.into()]));
     }
     if has("rg_binary") {
-        commands.push(format!("fd -e {ext} . | xargs rg -a '{pattern}'"));
+        commands.push(crate::command::pipe_fd_to_rg(ext, pattern, root, &[], &["-a"]));
     }
     if !git_deleted.is_empty() {
-        commands.push(format!("git log -S'{pattern}' --oneline --all   # matches scrubbed from the tree"));
+        commands.push(crate::command::shell("git", &["log".into(), "-S".into(), pattern.into(), "--oneline".into(), "--all".into(), "--".into()]));
     }
     if !ast_only.is_empty() {
         let sp = structural.unwrap_or("");
         let lg = lang.unwrap_or("");
-        commands.push(format!("ast-grep run -p '{sp}' -l {lg} {root}   # structural matches literal search misses"));
+        commands.push(crate::command::shell("ast-grep", &["run".into(), "-p".into(), sp.into(), "-l".into(), lg.into(), "--".into(), root.into()]));
     }
 
     // --- meta ---

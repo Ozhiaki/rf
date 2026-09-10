@@ -6,6 +6,7 @@
 //! verb emits the universal machine-first envelope; see `capabilities`.
 
 mod capabilities;
+mod command;
 mod conformance;
 mod content;
 mod doctor;

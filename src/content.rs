@@ -123,7 +123,9 @@ pub fn run(pattern: &str, path: &str) -> (Value, i32) {
                     format!("{} match(es) hidden by default; {hint}", new.len()),
                     new.clone(),
                 ));
-                commands.push(format!("rg {} '{pattern}' {path}", layer.flags));
+                let mut args: Vec<String> = layer.flags.split_whitespace().map(String::from).collect();
+                args.extend(["-e".into(), pattern.into(), "--".into(), path.into()]);
+                commands.push(crate::command::shell("rg", &args));
             }
         }
     }
@@ -155,7 +157,9 @@ pub fn run(pattern: &str, path: &str) -> (Value, i32) {
                 format!("{} match(es) hidden by default; {}", new.len(), p.hint),
                 new.clone(),
             ));
-            commands.push(format!("rg {} '{pattern}' {path}", p.flags));
+            let mut args: Vec<String> = p.flags.split_whitespace().map(String::from).collect();
+            args.extend(["-e".into(), pattern.into(), "--".into(), path.into()]);
+            commands.push(crate::command::shell("rg", &args));
         }
     }
 

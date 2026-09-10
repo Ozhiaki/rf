@@ -9,10 +9,23 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const BIN: &str = env!("CARGO_BIN_EXE_rf");
 const TOKEN: &str = "MAGIC_TOKEN_XYZ";
 const KEYS: [&str; 7] = ["ok", "tool_version", "data", "meta", "warnings", "commands", "errors"];
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn unique_temp(label: &str) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("rf-{label}-{}-{nanos}-{sequence}", std::process::id()));
+    std::fs::create_dir(&path).unwrap();
+    path
+}
 
 /// A self-cleaning corpus that exercises every content layer once.
 struct Corpus {
@@ -21,12 +34,7 @@ struct Corpus {
 
 impl Corpus {
     fn new() -> Corpus {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("rf-conf-{}-{}", std::process::id(), nanos));
-        let _ = std::fs::remove_dir_all(&path);
+        let path = unique_temp("conf");
         std::fs::create_dir_all(path.join("src")).unwrap();
 
         let w = |rel: &str, bytes: &[u8]| std::fs::write(path.join(rel), bytes).unwrap();
@@ -79,12 +87,7 @@ struct FindCorpus {
 
 impl FindCorpus {
     fn new() -> FindCorpus {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("rf-find-{}-{}", std::process::id(), nanos));
-        let _ = std::fs::remove_dir_all(&path);
+        let path = unique_temp("find");
         std::fs::create_dir_all(path.join("src")).unwrap();
         std::fs::create_dir_all(path.join("gen")).unwrap();
 
