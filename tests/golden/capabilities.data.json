@@ -394,6 +394,7 @@
         },
         "meta.history": {
           "actual_mode": "enum[available,git-absent,not-work-tree,partial,history-error]",
+          "budget_ms": 2000,
           "failed_revisions": "int",
           "requested_mode": "all-revisions",
           "served_revisions": "int"

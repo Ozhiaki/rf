@@ -18,6 +18,9 @@ use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, Instant};
+
+const HISTORY_BUDGET: Duration = Duration::from_secs(2);
 
 /// -uu -a config: the content the pipe surfaces if nothing filters it (no
 /// ignore, hidden shown, binary read as text). content_all uses this; the
@@ -91,9 +94,14 @@ fn git_ever_matched_with(git: &Path, pattern: &str, root: &str, ext: &str) -> Hi
         .map(String::from)
         .collect();
     let glob = format!("*.{ext}");
+    let started = Instant::now();
     let mut served = 0;
     let mut failed = 0;
     for rev in &revs {
+        if started.elapsed() >= HISTORY_BUDGET {
+            failed += revs.len().saturating_sub(served + failed);
+            break;
+        }
         let g = match Command::new(git)
             .args(["-C", root, "grep", "-l", "-e", pattern, rev, "--", &glob])
             .output()
@@ -136,6 +144,7 @@ fn history_meta(history: &History) -> Value {
     json!({
         "requested_mode": "all-revisions",
         "actual_mode": history.actual_mode(),
+        "budget_ms": HISTORY_BUDGET.as_millis(),
         "served_revisions": served,
         "failed_revisions": failed,
     })
@@ -147,18 +156,19 @@ fn history_probe_command(root: &str) -> String {
 
 /// Short hash of the most recent commit that changed `pattern`'s count in
 /// `path` — the scrub commit. Volatile; used only in a warning, never in `data`.
-fn git_scrub_commit(pattern: &str, root: &str, path: &str) -> String {
-    let sflag = format!("-S{pattern}");
+fn git_scrub_commits(pattern: &str, root: &str, ext: &str) -> BTreeMap<String, String> {
+    let glob = format!("*.{ext}");
     let out = Command::new("git")
-        .args(["-C", root, "log", "-1", "--format=%h", &sflag, "--", path])
+        .args(["-C", root, "log", "--all", "--format=%h", "--name-only", "-S", pattern, "--", &glob])
         .output();
-    match out {
-        Ok(o) => {
-            let h = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if h.is_empty() { "unknown".into() } else { h }
-        }
-        Err(_) => "unknown".into(),
+    let mut result = BTreeMap::new();
+    let Ok(out) = out else { return result; };
+    let mut commit = String::new();
+    for line in String::from_utf8_lossy(&out.stdout).lines().filter(|line| !line.is_empty()) {
+        if line.len() == 7 && line.bytes().all(|b| b.is_ascii_hexdigit()) { commit = line.into(); }
+        else if !commit.is_empty() { result.entry(line.into()).or_insert_with(|| commit.clone()); }
     }
+    result
 }
 
 /// Files whose SYNTAX matches the structural pattern (ast-grep). Returns
@@ -375,9 +385,8 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     // --- source 3: Git history matches (scrubbed from the tree) ---
     let ever = history.matches();
     let git_deleted: Vec<String> = ever.difference(&content_all).cloned().collect(); // BTreeSet -> sorted
-    let mut scrub_commits: BTreeMap<String, String> = BTreeMap::new();
+    let scrub_commits = git_scrub_commits(pattern, root, ext);
     for f in &git_deleted {
-        scrub_commits.insert(f.clone(), git_scrub_commit(pattern, root, f));
         data.push(row(f, "git_deleted", Some("recover the file from Git history".into())));
         bump(&mut stage_counts, "git_deleted");
     }
