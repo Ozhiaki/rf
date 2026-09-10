@@ -19,10 +19,18 @@ use clap::{Parser, Subcommand};
 use envelope::{envelope, err};
 use serde_json::{Map, Value};
 use std::io::IsTerminal;
+use std::time::Instant;
 
 #[derive(Parser)]
 #[command(name = "rf", version, about = "agent-first forensic search over ripgrep + fd", disable_help_subcommand = true)]
 struct Cli {
+    /// Emit the machine-readable envelope. Accepted before or after a verb.
+    #[arg(long, global = true)]
+    json: bool,
+    /// Disable terminal decoration. rf currently emits no ANSI decoration, but
+    /// the accepted global flag is part of the stable parser contract.
+    #[arg(long = "no-color", global = true)]
+    no_color: bool,
     #[command(subcommand)]
     verb: Verb,
 }
@@ -31,16 +39,12 @@ struct Cli {
 enum Verb {
     /// Emit the machine contract.
     Capabilities {
-        #[arg(long)]
-        json: bool,
     },
     /// Content search with per-filter attribution.
     Content {
         pattern: String,
         #[arg(default_value = ".")]
         path: String,
-        #[arg(long)]
-        json: bool,
     },
     /// Staged cross-source discovery (port in progress).
     Find {
@@ -53,32 +57,23 @@ enum Verb {
         structural: Option<String>,
         #[arg(long)]
         lang: Option<String>,
-        #[arg(long)]
-        json: bool,
     },
     /// Diagnose the environment and active ignore mode.
     Doctor {
         #[arg(default_value = ".")]
         path: String,
-        #[arg(long)]
-        json: bool,
     },
     /// Run the release self-check profile against this binary.
     Conformance {
-        #[arg(long)]
-        json: bool,
     },
 }
 
-fn wants_json(v: &Verb) -> bool {
-    let flag = match v {
-        Verb::Capabilities { json }
-        | Verb::Content { json, .. }
-        | Verb::Find { json, .. }
-        | Verb::Doctor { json, .. }
-        | Verb::Conformance { json } => *json,
-    };
-    flag || !std::io::stdout().is_terminal()
+fn bootstrap_json() -> bool {
+    // This scan is deliberately lexical and stops at `--`: a later `--json` is
+    // data, not a global option. It decides the error-rendering mode before
+    // clap can reject malformed argv.
+    std::env::args().skip(1).take_while(|a| a != "--").any(|a| a == "--json")
+        || !std::io::stdout().is_terminal()
 }
 
 fn dispatch(v: &Verb) -> (Value, i32) {
@@ -151,19 +146,43 @@ fn render_human(env: &Value) -> String {
     out.join("\n")
 }
 
-fn emit(env: &Value, code: i32, json: bool) -> ! {
+fn emit(mut env: Value, code: i32, json: bool, started: Instant) -> ! {
+    if let Some(meta) = env.get_mut("meta").and_then(Value::as_object_mut) {
+        // A fixed source epoch is the explicit reproducible-output mode. It
+        // freezes the timing field too, so fixtures can compare complete JSON.
+        let elapsed = if std::env::var_os("SOURCE_DATE_EPOCH").is_some() {
+            0
+        } else {
+            started.elapsed().as_millis() as u64
+        };
+        meta.insert("elapsed_ms".into(), Value::from(elapsed));
+    }
+    if !env["ok"].as_bool().unwrap_or(false) {
+        if let Some(errors) = env.get_mut("errors").and_then(Value::as_array_mut) {
+            for error in errors {
+                if let Some(object) = error.as_object_mut() {
+                    object.insert("exit_code".into(), Value::from(code));
+                }
+            }
+        }
+    }
     if json {
-        println!("{}", serde_json::to_string_pretty(env).unwrap_or_default());
+        println!("{}", serde_json::to_string_pretty(&env).unwrap_or_default());
+        if let Some(message) = env["errors"][0]["message"].as_str() {
+            eprintln!("error: {message}");
+        }
     } else {
-        println!("{}", render_human(env));
+        println!("{}", render_human(&env));
         for e in env["errors"].as_array().unwrap_or(&vec![]) {
-            eprintln!("error: {}: {}", e["code"].as_str().unwrap_or(""), e["msg"].as_str().unwrap_or(""));
+            eprintln!("error: {}: {}", e["code"].as_str().unwrap_or(""), e["message"].as_str().unwrap_or(""));
         }
     }
     std::process::exit(code);
 }
 
 fn main() {
+    let started = Instant::now();
+    let json = bootstrap_json();
     // Parse. clap exits 0 on --help/--version; remap its bad-args exit to the
     // the user-input-error code (1) with an envelope.
     let cli = match Cli::try_parse() {
@@ -176,27 +195,27 @@ fn main() {
             }
             let mut meta = Map::new();
             meta.insert("verb".into(), Value::Null);
-            let env = envelope(false, vec![], meta, vec![], vec![], vec![err("USAGE", "invalid arguments; see --help")]);
-            if std::io::stderr().is_terminal() {
-                eprintln!("error: USAGE: invalid arguments; see --help");
-            } else {
-                println!("{}", serde_json::to_string_pretty(&env).unwrap_or_default());
-            }
-            std::process::exit(1);
+            let code = match e.kind() {
+                ErrorKind::UnknownArgument => "UNKNOWN_FLAG",
+                ErrorKind::InvalidSubcommand => "UNKNOWN_COMMAND",
+                ErrorKind::InvalidValue | ErrorKind::ValueValidation => "INVALID_INPUT",
+                ErrorKind::MissingRequiredArgument => "MISSING_ARGUMENT",
+                _ => "USAGE",
+            };
+            let env = envelope(false, vec![], meta, vec![], vec![], vec![err(code, "invalid arguments; see --help")]);
+            emit(env, 1, json, started);
         }
     };
-
-    let json = wants_json(&cli.verb);
 
     // Totality: no backend panic reaches the user as an unmediated crash.
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| dispatch(&cli.verb)));
     match result {
-        Ok((env, code)) => emit(&env, code, json),
+        Ok((env, code)) => emit(env, code, json || cli.json, started),
         Err(_) => {
             let mut meta = Map::new();
             meta.insert("verb".into(), Value::Null);
             let env = envelope(false, vec![], meta, vec![], vec![], vec![err("INTERNAL", "internal error (panic caught)")]);
-            emit(&env, 3, json);
+            emit(env, 6, json || cli.json, started);
         }
     }
 }

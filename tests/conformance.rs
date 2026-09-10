@@ -143,6 +143,81 @@ fn rf(args: &[&str], cwd: Option<&Path>, env: &[(&str, &str)]) -> (i32, Value, S
     (out.status.code().unwrap_or(-1), json, stdout)
 }
 
+/// The error contract has a second required channel: structured output remains
+/// on stdout while the first error message is mirrored to stderr.
+fn rf_with_stderr(
+    args: &[&str],
+    cwd: Option<&Path>,
+    env: &[(&str, &str)],
+) -> (i32, Value, String, String) {
+    let mut c = Command::new(BIN);
+    c.args(args);
+    if let Some(d) = cwd {
+        c.current_dir(d);
+    }
+    for (k, v) in env {
+        c.env(k, v);
+    }
+    let out = c.output().expect("spawn rf");
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    let json = serde_json::from_str(&stdout).expect("machine output parses");
+    (out.status.code().unwrap_or(-1), json, stdout, stderr)
+}
+
+#[test]
+fn error_envelopes_and_global_json_are_total() {
+    let corpus = Corpus::new();
+    let cwd = Some(corpus.path.as_path());
+    let error_keys = [
+        "code",
+        "message",
+        "path",
+        "remediation",
+        "did_you_mean",
+        "exit_code",
+    ];
+
+    for args in [
+        vec!["--json", "content", "(", "."],
+        vec!["content", "(", ".", "--json"],
+        vec!["--json", "content"],
+    ] {
+        let (code, env, _stdout, stderr) = rf_with_stderr(&args, cwd, &[]);
+        assert_eq!(code, 1, "{args:?}");
+        assert_eq!(env["ok"], Value::from(false));
+        assert!(env["data"].is_null());
+        assert!(KEYS.iter().all(|key| env.get(*key).is_some()));
+        assert!(error_keys.iter().all(|key| env["errors"][0].get(*key).is_some()));
+        assert_eq!(env["errors"][0]["exit_code"], Value::from(1));
+        assert!(!stderr.trim().is_empty());
+    }
+
+    // A global flag is valid in both parser positions. A flag after `--` is
+    // literal pattern data and cannot select JSON mode by bootstrap accident.
+    for args in [
+        vec!["--json", "content", TOKEN, "."],
+        vec!["content", TOKEN, ".", "--json"],
+        vec!["content", "--", "--json"],
+    ] {
+        let (code, env, _stdout, _stderr) = rf_with_stderr(&args, cwd, &[]);
+        assert_eq!(code, 0, "{args:?}");
+        assert_eq!(env["ok"], Value::from(true));
+    }
+
+    // Stage-order probes: parser global flags beat a bad verb, verb resolution
+    // beats later local syntax, and `--` prevents flag recognition.
+    for (args, want) in [
+        (vec!["--json", "--bogus", "badverb"], "UNKNOWN_FLAG"),
+        (vec!["--json", "badverb", "--bogus"], "UNKNOWN_COMMAND"),
+        (vec!["--json", "content", "--bogus"], "UNKNOWN_FLAG"),
+    ] {
+        let (code, env, _stdout, _stderr) = rf_with_stderr(&args, cwd, &[]);
+        assert_eq!(code, 1, "{args:?}");
+        assert_eq!(env["errors"][0]["code"], Value::from(want));
+    }
+}
+
 #[test]
 fn conformance() {
     let corpus = Corpus::new();
@@ -166,7 +241,7 @@ fn conformance() {
         check(&format!("envelope keys: {}", v[0]), keys_ok, format!("{:?}", e.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>())));
         check(
             &format!("meta.contract_version: {}", v[0]),
-            e["meta"]["contract_version"] == 1,
+            e["meta"]["contract_version"] == "2",
             String::new(),
         );
     }
@@ -471,11 +546,11 @@ fn fault_seam_absent_in_release() {
 #[test]
 fn fault_seam_proves_totality() {
     // Injecting a fault at each stage must yield a TOTAL error envelope: the
-    // catch_unwind wrapper turns the panic into exit 3 + INTERNAL + seven keys,
+    // catch_unwind wrapper turns the panic into exit 6 + INTERNAL + seven keys,
     // never an unmediated crash (which would be exit 101 with no JSON).
     for stage in ["content", "find", "doctor", "engine"] {
         let (code, e, _) = rf(&stage_argv(stage), None, &[("RF_FAULT", stage)]);
-        assert_eq!(code, 3, "stage {stage}: fault must exit 3 (internal), not crash");
+        assert_eq!(code, 6, "stage {stage}: fault must exit 6 (internal), not crash");
         assert_eq!(e["ok"], Value::from(false), "stage {stage}: ok must be false");
         assert_eq!(e["errors"][0]["code"], Value::from("INTERNAL"), "stage {stage}");
         assert!(
