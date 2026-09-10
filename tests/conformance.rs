@@ -233,6 +233,16 @@ fn typo_correction_is_public_unique_and_stops_at_double_dash() {
 }
 
 #[test]
+fn workflow_guide_is_declared_and_uses_typed_recipes() {
+    let (_, guide, _, _) = rf_with_stderr(&["robot-docs", "guide", "--json"], None, &[]);
+    let recipes = guide["data"].as_array().unwrap();
+    assert!(!recipes.is_empty());
+    assert!(recipes.iter().all(|recipe| ["id", "goal", "inputs", "command", "expected_branch", "version_range"].iter().all(|key| recipe.get(*key).is_some())));
+    let (_, caps, _, _) = rf_with_stderr(&["capabilities", "--json"], None, &[]);
+    assert!(caps["data"][0]["verbs"]["robot-docs"].is_object());
+}
+
+#[test]
 fn conformance() {
     let corpus = Corpus::new();
     let cd = Some(corpus.path.as_path());

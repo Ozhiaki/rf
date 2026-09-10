@@ -171,6 +171,12 @@
           "path",
           "pattern"
         ]
+      },
+      "robot-docs": {
+        "aliases": [], "flags": [], "path": ["robot-docs"], "positionals": []
+      },
+      "robot-docs guide": {
+        "aliases": [], "flags": [{"aliases": [], "arity": 0, "name": "--compact"}], "path": ["robot-docs", "guide"], "positionals": []
       }
     },
     "global_flags": [
@@ -202,8 +208,10 @@
     "source": "clap command registry"
   },
   "release_scope": {
-    "workflow_guides": [],
-    "workflow_guides_status": "not released in contract version 2"
+    "workflow_guides": [
+      "robot-docs guide"
+    ],
+    "workflow_guides_status": "released in contract version 2"
   },
   "tool_version": "PINNED",
   "value_domains": [
@@ -309,6 +317,25 @@
       ],
       "flags": [],
       "summary": "environment DIAGNOSE: engine build, regex features, and the active ignore mode for a path"
+    },
+    "robot-docs": {
+      "aliases": [],
+      "flags": [],
+      "subcommands": {
+        "guide": {
+          "flags": [
+            {"arity": 0, "name": "--compact", "type": "bool"}
+          ],
+          "output_schema": {"data[]": {"command": "safe shell command", "expected_branch": "string", "goal": "string", "id": "string", "inputs": "array[string]", "version_range": "string"}}
+        }
+      },
+      "summary": "agent workflow documents"
+    },
+    "robot-docs guide": {
+      "aliases": [],
+      "flags": [{"arity": 0, "name": "--compact", "type": "bool"}],
+      "output_schema": {"data[]": {"command": "safe shell command", "expected_branch": "string", "goal": "string", "id": "string", "inputs": "array[string]", "version_range": "string"}},
+      "summary": "emit agent workflow recipes"
     },
     "find": {
       "aliases": [],

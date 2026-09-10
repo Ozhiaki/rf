@@ -290,7 +290,8 @@ pub fn run() -> (Value, i32) {
     let mut s = Sweep::new();
 
     // Minimal valid argv per verb (a happy path that needs no external corpus).
-    let happy: [(&str, Vec<&str>); 4] = [
+    let happy: [(&str, Vec<&str>); 5] = [
+        ("robot-docs", vec!["robot-docs", "guide", "--json"]),
         ("capabilities", vec!["capabilities", "--json"]),
         ("content", vec!["content", "zzq_no_such_token", "/rf-conformance-empty", "--json"]),
         (

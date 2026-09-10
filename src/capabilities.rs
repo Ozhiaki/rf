@@ -10,9 +10,11 @@ pub fn build() -> Value {
     let mut v = json!({
         "contract_version": CONTRACT_VERSION,
         "tool_version": TOOL_VERSION,
-        "release_scope": {"workflow_guides": [], "workflow_guides_status": "not released in contract version 2"},
+        "release_scope": {"workflow_guides": ["robot-docs guide"], "workflow_guides_status": "released in contract version 2"},
         "engine": "in-process (ignore + grep crates); no subprocess",
         "verbs": {
+            "robot-docs": {"summary": "agent workflow documents", "aliases": [], "flags": [], "subcommands": {"guide": {"flags": [{"name":"--compact", "arity":0, "type":"bool"}], "output_schema": {"data[]": {"id":"string", "goal":"string", "inputs":"array[string]", "command":"safe shell command", "expected_branch":"string", "version_range":"string"}}}}},
+            "robot-docs guide": {"summary": "emit agent workflow recipes", "aliases": [], "flags": [{"name":"--compact", "arity":0, "type":"bool"}], "output_schema": {"data[]": {"id":"string", "goal":"string", "inputs":"array[string]", "command":"safe shell command", "expected_branch":"string", "version_range":"string"}}},
             "capabilities": {"summary": "emit this machine contract", "aliases": [], "flags": []},
             "content": {
                 "summary": "content search; attributes each match to the filter that would hide it",

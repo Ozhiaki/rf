@@ -3,7 +3,7 @@
   "counts": {
     "fail": 0,
     "not_applicable": 5,
-    "pass": 26
+    "pass": 28
   },
   "cases": [
     {
@@ -28,6 +28,11 @@
     },
     {
       "case_id": "B-03::flag=--bogus::verb=find",
+      "verdict": "pass",
+      "reason": null
+    },
+    {
+      "case_id": "B-03::flag=--bogus::verb=robot-docs",
       "verdict": "pass",
       "reason": null
     },
@@ -88,6 +93,11 @@
     },
     {
       "case_id": "M-01::shape=envelope::verb=find",
+      "verdict": "pass",
+      "reason": null
+    },
+    {
+      "case_id": "M-01::shape=envelope::verb=robot-docs",
       "verdict": "pass",
       "reason": null
     },

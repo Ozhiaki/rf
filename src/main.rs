@@ -16,6 +16,7 @@ mod fault;
 mod find;
 mod manifest;
 mod pagination;
+mod guide;
 
 use clap::{Parser, Subcommand};
 use envelope::{envelope, err};
@@ -47,6 +48,9 @@ fn extension(value: &str) -> Result<String, String> {
 
 #[derive(Subcommand)]
 enum Verb {
+    /// Task workflows for agents.
+    #[command(name = "robot-docs")]
+    RobotDocs { #[command(subcommand)] command: RobotDocs },
     /// Emit the machine contract.
     Capabilities {
     },
@@ -87,6 +91,9 @@ enum Verb {
     },
 }
 
+#[derive(Subcommand)]
+enum RobotDocs { Guide { #[arg(long)] compact: bool } }
+
 fn bootstrap_json() -> bool {
     // This scan is deliberately lexical and stops at `--`: a later `--json` is
     // data, not a global option. It decides the error-rendering mode before
@@ -97,6 +104,7 @@ fn bootstrap_json() -> bool {
 
 fn dispatch(v: &Verb) -> (Value, i32) {
     match v {
+        Verb::RobotDocs { command: RobotDocs::Guide { compact } } => guide::run(*compact),
         Verb::Capabilities { .. } => capabilities::run(),
         Verb::Content { pattern, path, limit, cursor, .. } => content::run(pattern, path, *limit, cursor.as_deref()),
         Verb::Find { pattern, path, name, structural, lang, limit, cursor, .. } => {
