@@ -520,8 +520,8 @@
     "contract_version": "2",
     "data_hash": "b5918d313097",
     "elapsed_ms": 0,
-    "request_id": "8c149a65cf21b6bc",
-    "ts_iso": "2026-09-10T18:38:53Z",
+    "request_id": "5197286ac79e2c4c",
+    "ts_iso": "2026-09-10T19:20:15Z",
     "verb": "capabilities"
   },
   "ok": true,

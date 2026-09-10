@@ -18,15 +18,23 @@ reconciled against — distinct from the site's published-artifact fixture.
 ## Pinned release candidate
 
 - Next package version: `rf 0.0.5` (contract version 2)
-- Source commit: `aa10addf49ab4c9706acbb38fdc03fe0cedda2eb` (cargo `.cargo_vcs_info.json`)
-- Capture content hash (sha256): `569cf76cc0f63f9376586d0620da621efcc40e5d5194302e98dc0a4987e0647a`
+- Source commit: `aa6b9b74c14b014eab5b970626878013f6dc3f07` (cargo `.cargo_vcs_info.json`)
+- Capture content hash (sha256): `261dbd7d9ee8eff28c6224244c8f537b69c58bdc7a5a0be0bc3d1afc8b45c919`
+- Package archive (sha256): `f2c30df87354800512f2d4990c47eb0f69a559ef89ba4f4ba0013a80eefb89c8`
+  (`target/package/rf-0.0.5.crate`, 20 files) — the verification package built at
+  source commit `aa6b9b7`.
 - Installed binary: `<tmproot>/bin/rf`, installed from the extracted `rf-0.0.5`
   package manifest (not the working tree)
 - Conformance at capture: profile `release-self-check`, 28 pass / 5 not-applicable
   / 0 fail (green)
 
-No final archive hash is recorded here; the shippable package is built and hashed
-at publish time (see the final-package verification step).
+Committing this re-capture moves HEAD past `aa6b9b7`, so `cargo publish`
+re-packages at the final release commit. Every *included* file is byte-identical
+to the verification package (this fixture and its README are excluded from the
+archive); only the auto-generated `.cargo_vcs_info.json` records a different
+commit sha, so the uploaded archive's hash differs from the one above by that one
+field. Re-run the packaged-artifact procedure at the exact publish commit if a
+matching archive hash is required.
 
 ## Validity
 
@@ -34,18 +42,20 @@ Prose edits (README, CHANGELOG) keep this fixture valid, because they do not
 change what the binary emits. A code or contract change after this capture
 invalidates the fixture and forces a re-capture and re-verify before publish.
 
-## Invalidation log (pending re-capture)
+## Re-capture history
 
-- `75d34bb` (rf-guy.13) — fixed the top-level `--help` workflow-guide line. CLI
-  help text only; the `capabilities` envelope is unchanged (verified: normalized
-  `capabilities --json` is byte-identical to this fixture apart from per-run
-  volatile fields — `request_id`, `ts_iso`, `data_hash`, `elapsed_ms`). This
-  fixture's pinned source commit (`aa10addf`) now predates HEAD, so provenance is
-  stale even though contract content matches.
+- Captured at `aa10addf` (rf-guy.9) — first RC capture.
+- Re-captured at `aa6b9b7` (rf-guy.12, final pre-publish) — re-anchored provenance
+  after the pre-publish code and packaging changes:
+  - `75d34bb` (rf-guy.13) — fixed the top-level `--help` workflow-guide line (CLI
+    help text only).
+  - `1af9de1` + `aa6b9b7` — restricted the published archive to a root-anchored
+    `include` allowlist (drops `.beads/`, `bench/`, internal contract-QA files).
+  Verified the machine contract is unchanged across the re-capture: normalized
+  `capabilities --json` (dropping per-run `request_id`, `ts_iso`, `data_hash`,
+  `elapsed_ms`) is byte-identical to the prior fixture. Conformance green
+  (28/0/5). None of these changes touch the compiled binary's contract; the
+  re-capture re-anchors source commit, capture hash, and archive hash only.
 
-The re-capture runs once at the final pre-publish capture step (rf-guy.12). It
-re-anchors provenance for `75d34bb` only; the guardrail bead (rf-guy.7) was
-re-sequenced to land after publish, so no further pre-publish code change is
-pending. Until the re-capture, this fixture stays contract-valid but
-provenance-stale; the publish gate (rf-guy.12) forbids shipping without a fresh
-capture.
+This fixture is current for the staged publish commit. Any further code or
+contract change forces another re-capture and re-verify before publish.
