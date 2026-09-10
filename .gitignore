@@ -1,3 +1,4 @@
 /target
 # br doctor per-run artifacts
 .doctor/
+.DS_Store
