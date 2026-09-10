@@ -1,6 +1,6 @@
 [package]
 name = "rf"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 description = "rf — an agent-friendly search envelope that fuses ripgrep and fd, with cross-tool stage attribution for false-negative forensics. Early development; see the repository for status."
 license = "Apache-2.0"
