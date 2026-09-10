@@ -16,6 +16,7 @@ use crate::engine::{content_matches, name_matches, rel, SearchCfg};
 use crate::envelope::{envelope, err, warn};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 use std::process::Command;
 
 /// -uu -a config: the content the pipe surfaces if nothing filters it (no
@@ -30,31 +31,86 @@ fn cfg_default() -> SearchCfg {
     SearchCfg { use_ignore: true, skip_hidden: true, binary_as_text: false, case_insensitive: false, encoding: None }
 }
 
-/// git plumbing: files matching *.ext that held `pattern` in ANY committed tree.
-/// Empty (never an error) when `root` is not a work tree or git is absent.
-fn git_ever_matched(pattern: &str, root: &str, ext: &str) -> BTreeSet<String> {
+enum History {
+    Available { matches: BTreeSet<String>, served: usize },
+    GitAbsent,
+    NotWorkTree,
+    Partial { matches: BTreeSet<String>, served: usize, failed: usize },
+    Error,
+}
+
+impl History {
+    fn actual_mode(&self) -> &'static str {
+        match self {
+            Self::Available { .. } => "available",
+            Self::GitAbsent => "git-absent",
+            Self::NotWorkTree => "not-work-tree",
+            Self::Partial { .. } => "partial",
+            Self::Error => "history-error",
+        }
+    }
+
+    fn matches(&self) -> BTreeSet<String> {
+        match self {
+            Self::Available { matches, .. } | Self::Partial { matches, .. } => matches.clone(),
+            Self::GitAbsent | Self::NotWorkTree | Self::Error => BTreeSet::new(),
+        }
+    }
+
+    fn counts(&self) -> (usize, usize) {
+        match self {
+            Self::Available { served, .. } => (*served, 0),
+            Self::Partial { served, failed, .. } => (*served, *failed),
+            Self::GitAbsent | Self::NotWorkTree | Self::Error => (0, 0),
+        }
+    }
+}
+
+/// Git plumbing: files matching *.ext that held `pattern` in any committed
+/// tree. An unavailable or incomplete history is a typed outcome, never an
+/// indistinguishable empty result.
+fn git_ever_matched_with(git: &Path, pattern: &str, root: &str, ext: &str) -> History {
     let mut out = BTreeSet::new();
-    let probe = Command::new("git")
+    let probe = Command::new(git)
         .args(["-C", root, "rev-parse", "--is-inside-work-tree"])
         .output();
-    let in_tree = matches!(probe, Ok(ref o) if o.status.success()
-        && String::from_utf8_lossy(&o.stdout).trim() == "true");
-    if !in_tree {
-        return out;
-    }
-    let revs_out = match Command::new("git").args(["-C", root, "rev-list", "--all"]).output() {
-        Ok(o) => o,
-        Err(_) => return out,
+    let probe = match probe {
+        Ok(out) => out,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return History::GitAbsent,
+        Err(_) => return History::Error,
     };
+    if !probe.status.success() || String::from_utf8_lossy(&probe.stdout).trim() != "true" {
+        return History::NotWorkTree;
+    }
+    let revs_out = match Command::new(git).args(["-C", root, "rev-list", "--all"]).output() {
+        Ok(out) if out.status.success() => out,
+        _ => return History::Error,
+    };
+    let revs: Vec<String> = String::from_utf8_lossy(&revs_out.stdout)
+        .split_whitespace()
+        .map(String::from)
+        .collect();
     let glob = format!("*.{ext}");
-    for rev in String::from_utf8_lossy(&revs_out.stdout).split_whitespace() {
-        let g = match Command::new("git")
+    let mut served = 0;
+    let mut failed = 0;
+    for rev in &revs {
+        let g = match Command::new(git)
             .args(["-C", root, "grep", "-l", "-e", pattern, rev, "--", &glob])
             .output()
         {
-            Ok(o) => o,
-            Err(_) => continue,
+            Ok(out) => out,
+            Err(_) => {
+                failed += 1;
+                continue;
+            }
         };
+        // `git grep` exits 1 when it successfully scanned a revision but found
+        // no match. Other nonzero exits mean that revision was not served.
+        if !g.status.success() && g.status.code() != Some(1) {
+            failed += 1;
+            continue;
+        }
+        served += 1;
         for ln in String::from_utf8_lossy(&g.stdout).lines() {
             // "<rev>:<path>"
             if let Some((_, path)) = ln.split_once(':') {
@@ -62,7 +118,31 @@ fn git_ever_matched(pattern: &str, root: &str, ext: &str) -> BTreeSet<String> {
             }
         }
     }
-    out
+    if failed == 0 {
+        History::Available { matches: out, served }
+    } else if served == 0 && !revs.is_empty() {
+        History::Error
+    } else {
+        History::Partial { matches: out, served, failed }
+    }
+}
+
+fn git_ever_matched(pattern: &str, root: &str, ext: &str) -> History {
+    git_ever_matched_with(Path::new("git"), pattern, root, ext)
+}
+
+fn history_meta(history: &History) -> Value {
+    let (served, failed) = history.counts();
+    json!({
+        "requested_mode": "all-revisions",
+        "actual_mode": history.actual_mode(),
+        "served_revisions": served,
+        "failed_revisions": failed,
+    })
+}
+
+fn history_probe_command(root: &str) -> String {
+    crate::command::shell("git", &["-C".into(), root.into(), "rev-parse".into(), "--is-inside-work-tree".into()])
 }
 
 /// Short hash of the most recent commit that changed `pattern`'s count in
@@ -125,6 +205,56 @@ fn file_contains_literal(root: &str, rel_path: &str, needle: &str) -> bool {
     }
 }
 
+#[cfg(test)]
+mod history_tests {
+    use super::{git_ever_matched_with, History};
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn fake_git(label: &str, script: &str) -> std::path::PathBuf {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("rf-history-{label}-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("git");
+        fs::write(&path, script).unwrap();
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&path, permissions).unwrap();
+        path
+    }
+
+    #[test]
+    fn history_outcomes_are_distinct_and_coverage_is_counted() {
+        let absent = git_ever_matched_with(std::path::Path::new("/rf-no-such-git"), "needle", ".", "config");
+        assert!(matches!(absent, History::GitAbsent));
+
+        let not_work_tree = fake_git("not-work-tree", "#!/bin/sh\nexit 128\n");
+        let state = git_ever_matched_with(&not_work_tree, "needle", ".", "config");
+        assert!(matches!(state, History::NotWorkTree));
+
+        let partial = fake_git(
+            "partial",
+            "#!/bin/sh\ncase \"$*\" in\n  *rev-parse*) printf 'true\\n' ;;\n  *rev-list*) printf 'good\\nbad\\n' ;;\n  *grep*good*) printf 'good:old.config\\n' ;;\n  *grep*) exit 2 ;;\nesac\n",
+        );
+        let state = git_ever_matched_with(&partial, "needle", ".", "config");
+        match state {
+            History::Partial { matches, served, failed } => {
+                assert_eq!(matches.into_iter().collect::<Vec<_>>(), vec!["old.config"]);
+                assert_eq!((served, failed), (1, 1));
+            }
+            _ => panic!("expected partial history"),
+        }
+
+        let error = fake_git(
+            "error",
+            "#!/bin/sh\ncase \"$*\" in *rev-parse*) printf 'true\\n' ;; *rev-list*) exit 2 ;; esac\n",
+        );
+        let state = git_ever_matched_with(&error, "needle", ".", "config");
+        assert!(matches!(state, History::Error));
+    }
+}
+
 pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang: Option<&str>, limit: usize, cursor: Option<&str>) -> (Value, i32) {
     // Guard the port keeps stable across the contract: --structural needs --lang.
     if structural.is_some() && lang.is_none() {
@@ -168,6 +298,46 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     };
     let pipe_found: BTreeSet<_> = fd_default.intersection(&rg_default).cloned().collect();
 
+    // --- source 3: Git history coverage ---
+    let history = git_ever_matched(pattern, root, ext);
+    if matches!(&history, History::Error) {
+        let mut meta = Map::new();
+        meta.insert("verb".into(), Value::from("find"));
+        meta.insert("history".into(), history_meta(&history));
+        return (
+            envelope(
+                false,
+                vec![],
+                meta,
+                vec![],
+                vec![history_probe_command(root)],
+                vec![err("HISTORY_ERROR", "Git history could not be scanned; no partial result was returned")],
+            ),
+            3,
+        );
+    }
+    let mut history_warnings: Vec<Value> = Vec::new();
+    let mut history_commands: Vec<String> = Vec::new();
+    match &history {
+        History::GitAbsent => {
+            history_warnings.push(warn("GIT_ABSENT", "Git is unavailable; history coverage was not provided", vec![]));
+            history_commands.push(crate::command::shell("git", &["--version".into()]));
+        }
+        History::NotWorkTree => {
+            history_warnings.push(warn("GIT_NOT_WORK_TREE", "path is not a Git work tree; history coverage was not provided", vec![]));
+            history_commands.push(history_probe_command(root));
+        }
+        History::Partial { served, failed, .. } => {
+            history_warnings.push(warn(
+                "GIT_HISTORY_PARTIAL",
+                format!("Git history served {served} revision(s); {failed} revision(s) failed"),
+                vec![],
+            ));
+            history_commands.push(history_probe_command(root));
+        }
+        History::Available { .. } | History::Error => {}
+    }
+
     // --- per-file stage attribution over the content the pipe surfaced ---
     let mut data: Vec<Value> = Vec::new();
     let mut stage_counts: BTreeMap<String, i64> = BTreeMap::new();
@@ -202,8 +372,8 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
         bump(&mut stage_counts, stage);
     }
 
-    // --- source 3: git history (scrubbed from the tree) ---
-    let ever = git_ever_matched(pattern, root, ext);
+    // --- source 3: Git history matches (scrubbed from the tree) ---
+    let ever = history.matches();
     let git_deleted: Vec<String> = ever.difference(&content_all).cloned().collect(); // BTreeSet -> sorted
     let mut scrub_commits: BTreeMap<String, String> = BTreeMap::new();
     for f in &git_deleted {
@@ -265,7 +435,7 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     };
 
     // --- warnings: one per miss, carrying the paste-ready fix ---
-    let mut warnings: Vec<Value> = Vec::new();
+    let mut warnings: Vec<Value> = history_warnings;
     if ast_unavailable {
         warnings.push(warn(
             "STRUCTURAL_UNAVAILABLE",
@@ -285,7 +455,7 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     }
 
     // --- commands: correction recipes, one per distinct miss kind ---
-    let mut commands: Vec<String> = Vec::new();
+    let mut commands: Vec<String> = history_commands;
     let has = |s: &str| missed.iter().any(|d| d["stage"] == s);
     if has("fd_hidden") || has("fd_ignore") || has("fd_filter") {
         commands.push(crate::command::pipe_fd_to_rg(ext, pattern, root, &["-u"], &["-a"]));
@@ -316,6 +486,7 @@ pub fn run(pattern: &str, path: &str, name: &str, structural: Option<&str>, lang
     meta.insert("pipe_matched".into(), Value::from(pipe_found.len()));
     meta.insert("content_total".into(), Value::from(content_all.len()));
     meta.insert("history_matches".into(), Value::from(git_deleted.len()));
+    meta.insert("history".into(), history_meta(&history));
     meta.insert("structural_matches".into(), Value::from(ast_only.len()));
     let counts: Map<String, Value> = stage_counts.into_iter().map(|(k, v)| (k, Value::from(v))).collect();
     meta.insert("hidden_by_stage".into(), Value::from(counts));

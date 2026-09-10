@@ -19,6 +19,7 @@
     "BAD_PATTERN": "the search regex failed to compile",
     "CONFLICT": "a cursor snapshot no longer matches the current result set",
     "CONFORMANCE_FAIL": "one or more conformance cases returned verdict:fail",
+    "HISTORY_ERROR": "Git history could not be scanned; no partial result was returned",
     "INTERNAL": "internal fault caught by the totality wrapper",
     "INVALID_INPUT": "a supplied value failed parser validation",
     "MISSING_ARGUMENT": "a required positional or flag value is absent",
@@ -353,6 +354,12 @@
           "fix": "string|null",
           "stage": "enum[found,fd_name,fd_hidden,fd_ignore,fd_filter,rg_binary,git_deleted,ast_structural]"
         },
+        "meta.history": {
+          "actual_mode": "enum[available,git-absent,not-work-tree,partial,history-error]",
+          "failed_revisions": "int",
+          "requested_mode": "all-revisions",
+          "served_revisions": "int"
+        },
         "meta.pagination": {
           "cursor": "string|null",
           "has_more": "bool",
@@ -363,7 +370,7 @@
           "truncated": "bool"
         }
       },
-      "summary": "staged fd|rg pipe (in-process) + git history + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural"
+      "summary": "staged fd|rg pipe (in-process) + typed Git history coverage + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural"
     }
   },
   "warning_codes": [
@@ -377,6 +384,9 @@
     "FD_IGNORE",
     "RG_BINARY",
     "GIT_DELETED",
+    "GIT_ABSENT",
+    "GIT_NOT_WORK_TREE",
+    "GIT_HISTORY_PARTIAL",
     "AST_STRUCTURAL",
     "STRUCTURAL_UNAVAILABLE",
     "IGNORE_MODE"

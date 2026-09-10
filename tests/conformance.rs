@@ -438,6 +438,28 @@ fn conformance() {
           find_page["meta"]["content_total"] == e["meta"]["content_total"]
               && find_page["meta"]["hidden_by_stage"] == e["meta"]["hidden_by_stage"],
           format!("{}", find_page["meta"]));
+    let plain = unique_temp("history-state");
+    std::fs::write(plain.join("only.config"), format!("{TOKEN}\n")).unwrap();
+    let plain_s = plain.to_string_lossy().into_owned();
+    let (not_tree_code, not_tree, _) = rf(
+        &["find", TOKEN, &plain_s, "--name", "config", "--json"],
+        None,
+        &[],
+    );
+    check("find: non-work-tree history is explicit",
+          not_tree_code == 0 && not_tree["meta"]["history"]["actual_mode"] == "not-work-tree"
+              && not_tree["warnings"].as_array().into_iter().flatten().any(|w| w["code"] == "GIT_NOT_WORK_TREE"),
+          format!("{}", not_tree));
+    let (absent_code, absent, _) = rf(
+        &["find", TOKEN, &plain_s, "--name", "config", "--json"],
+        None,
+        &[("PATH", "/rf-no-git-bin")],
+    );
+    check("find: absent Git history is explicit",
+          absent_code == 0 && absent["meta"]["history"]["actual_mode"] == "git-absent"
+              && absent["warnings"].as_array().into_iter().flatten().any(|w| w["code"] == "GIT_ABSENT"),
+          format!("{}", absent));
+    std::fs::remove_dir_all(plain).unwrap();
 
     // structural source is conditional on ast-grep; both branches must be total
     let warns: Vec<String> = e["warnings"].as_array().unwrap_or(&vec![])

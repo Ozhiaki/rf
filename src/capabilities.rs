@@ -27,7 +27,7 @@ pub fn build() -> Value {
                 "output_schema": {"data[]": {"file": "string", "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"}, "meta.pagination": {"limit": "int", "returned": "int", "total": "int", "truncated": "bool", "has_more": "bool", "cursor": "string|null", "snapshot_hash": "sha256"}}
             },
             "find": {
-                "summary": "staged fd|rg pipe (in-process) + git history + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural",
+                "summary": "staged fd|rg pipe (in-process) + typed Git history coverage + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural",
                 "aliases": [],
                 "args": [
                     {"name": "pattern", "arity": 1, "type": "string"},
@@ -40,7 +40,7 @@ pub fn build() -> Value {
                     {"name": "--limit", "arity": 1, "type": "int", "default": 100, "range": "1..=1000"},
                     {"name": "--cursor", "arity": 1, "type": "string", "domain": "opaque cursor from meta.pagination.cursor"}
                 ],
-                "output_schema": {"data[]": {"file": "string", "stage": "enum[found,fd_name,fd_hidden,fd_ignore,fd_filter,rg_binary,git_deleted,ast_structural]", "fix": "string|null"}, "meta.pagination": {"limit": "int", "returned": "int", "total": "int", "truncated": "bool", "has_more": "bool", "cursor": "string|null", "snapshot_hash": "sha256"}}
+                "output_schema": {"data[]": {"file": "string", "stage": "enum[found,fd_name,fd_hidden,fd_ignore,fd_filter,rg_binary,git_deleted,ast_structural]", "fix": "string|null"}, "meta.pagination": {"limit": "int", "returned": "int", "total": "int", "truncated": "bool", "has_more": "bool", "cursor": "string|null", "snapshot_hash": "sha256"}, "meta.history": {"requested_mode": "all-revisions", "actual_mode": "enum[available,git-absent,not-work-tree,partial,history-error]", "served_revisions": "int", "failed_revisions": "int"}}
             },
             "doctor": {
                 "summary": "environment DIAGNOSE: engine build, regex features, and the active ignore mode for a path",
@@ -82,13 +82,15 @@ pub fn build() -> Value {
             "MISSING_ARGUMENT": "a required positional or flag value is absent",
             "BAD_PATTERN": "the search regex failed to compile",
             "CONFLICT": "a cursor snapshot no longer matches the current result set",
+            "HISTORY_ERROR": "Git history could not be scanned; no partial result was returned",
             "INTERNAL": "internal fault caught by the totality wrapper",
             "CONFORMANCE_FAIL": "one or more conformance cases returned verdict:fail"
         },
         "warning_codes": [
             "IGNORE_VCS", "HIDDEN_SKIPPED", "BINARY_SKIPPED", "CASE_SENSITIVE",
             "ENCODING_MISS", "FD_NAME", "FD_HIDDEN", "FD_IGNORE", "RG_BINARY",
-            "GIT_DELETED", "AST_STRUCTURAL", "STRUCTURAL_UNAVAILABLE", "IGNORE_MODE"
+            "GIT_DELETED", "GIT_ABSENT", "GIT_NOT_WORK_TREE", "GIT_HISTORY_PARTIAL",
+            "AST_STRUCTURAL", "STRUCTURAL_UNAVAILABLE", "IGNORE_MODE"
         ],
         "diagnosis_order": [
             "bootstrap_mode", "global_flag", "command_path", "command_flag",
