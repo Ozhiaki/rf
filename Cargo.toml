@@ -8,6 +8,19 @@ repository = "https://github.com/rgfind/rf"
 keywords = ["ripgrep", "fd", "search", "cli", "grep"]
 categories = ["command-line-utilities"]
 readme = "README.md"
+# Write-once publish: ship ONLY the product surface. An allowlist (not an
+# exclude blocklist) keeps internal material — the .beads/ tracker, bench/
+# harness, and internal contract-QA fixtures — out of the crates.io archive by
+# construction, so a new internal file cannot leak in later. The `conformance`
+# verb is compiled in and unaffected; only the cargo-test suite stops shipping.
+include = [
+    "src/**/*.rs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "Cargo.toml",
+    "Cargo.lock",
+]
 
 [[bin]]
 name = "rf"
