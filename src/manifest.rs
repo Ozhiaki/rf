@@ -112,7 +112,23 @@ pub fn correction(token: &str) -> Option<String> {
         let (mut i, mut j, mut edits) = (0, 0, 0);
         let aa = a.as_bytes(); let bb = b.as_bytes();
         while i < aa.len() && j < bb.len() {
-            if aa[i] == bb[j] { i += 1; j += 1; } else { edits += 1; if edits > 1 { return false; } if aa.len() > bb.len() { i += 1; } else if bb.len() > aa.len() { j += 1; } else { i += 1; j += 1; } }
+            if aa[i] == bb[j] {
+                i += 1;
+                j += 1;
+                continue;
+            }
+            edits += 1;
+            if edits > 1 {
+                return false;
+            }
+            if aa.len() > bb.len() {
+                i += 1;
+            } else if bb.len() > aa.len() {
+                j += 1;
+            } else {
+                i += 1;
+                j += 1;
+            }
         }
         edits + (aa.len() - i) + (bb.len() - j) == 1
     }
