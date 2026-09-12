@@ -1,6 +1,6 @@
 //! Contract guardrail for the crate documentation tree.
 //!
-//! Two entry points, invoked through the repo-root cargo alias:
+//! Entry points, invoked through the repo-root cargo alias:
 //!
 //!   cargo xtask check      assert every registered tier-P claim still equals
 //!                          its field in the committed release-candidate fixture,
@@ -12,6 +12,16 @@
 //!                          re-capture into memory and assert the committed
 //!                          fixture is not stale (the pre-package CI gate),
 //!                          without rewriting it.
+//!   cargo xtask preflight  the publish stop-sign: run every gate that must hold
+//!                          at the moment of `cargo publish`, and refuse (non-zero
+//!                          exit) unless all pass. crates.io is write-once, so this
+//!                          is the last point at which docs and code can be forced
+//!                          into lock step. Gates: (1) the worktree is clean and
+//!                          committed; (2) the committed fixture matches a fresh
+//!                          capture from the binary being packaged; (3) the docs
+//!                          match the fixture with no stray GENERATED block; (4)
+//!                          the packaged file list stays within the include
+//!                          allowlist, so no guard or config path enters the crate.
 //!
 //! The registry (tests/fixtures/contract/coverage-registry.json) is the machine-
 //! readable successor to the prose coverage-matrix. Interpretive prose is not
@@ -33,8 +43,9 @@ fn main() -> ExitCode {
     let result = match cmd {
         "check" => cmd_check(),
         "capture" => cmd_capture(args.get(1).map(String::as_str) == Some("--check")),
+        "preflight" => cmd_preflight(),
         _ => {
-            eprintln!("usage: cargo xtask <check | capture [--check]>");
+            eprintln!("usage: cargo xtask <check | capture [--check] | preflight>");
             return ExitCode::from(2);
         }
     };
@@ -66,6 +77,15 @@ fn read_json(path: &Path) -> Result<Value, String> {
 // ---- check -----------------------------------------------------------------
 
 fn cmd_check() -> Result<(), String> {
+    let n = check_docs_against_fixture()?;
+    println!("contract-guard: {n} registered claim(s) match the committed fixture");
+    Ok(())
+}
+
+/// Core of `check`, without printing: assert every registered claim equals its
+/// fixture field and no surface carries a stray GENERATED block. Returns the
+/// number of claims checked. Shared by `cmd_check` and `cmd_preflight`.
+fn check_docs_against_fixture() -> Result<usize, String> {
     let root = repo_root();
     let registry = read_json(&root.join(REGISTRY))?;
     let fixture_rel = registry["fixture"]
@@ -155,11 +175,7 @@ fn cmd_check() -> Result<(), String> {
     }
 
     if failures.is_empty() {
-        println!(
-            "contract-guard: {} registered claim(s) match the committed fixture",
-            claims.len()
-        );
-        Ok(())
+        Ok(claims.len())
     } else {
         Err(format!(
             "{} claim(s) failed:\n  {}",
@@ -172,18 +188,33 @@ fn cmd_check() -> Result<(), String> {
 // ---- capture ---------------------------------------------------------------
 
 fn cmd_capture(check_only: bool) -> Result<(), String> {
+    if check_only {
+        fixture_matches_binary()?;
+        println!("contract-guard: committed fixture is current (contract-equivalent to a fresh capture)");
+        return Ok(());
+    }
     let root = repo_root();
     let registry = read_json(&root.join(REGISTRY))?;
     let fixture_rel = registry["fixture"]
         .as_str()
         .ok_or("registry: missing string field `fixture`")?;
     let fixture_path = root.join(fixture_rel);
+    let captured = capture_from_binary(&root)?;
+    let mut text =
+        serde_json::to_string_pretty(&captured).map_err(|e| format!("serialize: {e}"))?;
+    text.push('\n');
+    std::fs::write(&fixture_path, text).map_err(|e| format!("write {fixture_rel}: {e}"))?;
+    println!("contract-guard: rewrote {fixture_rel} from a fresh capture");
+    Ok(())
+}
 
-    // Build the binary once, then run it under a frozen epoch so ts_iso and
-    // elapsed_ms are deterministic; request_id and data_hash are content-derived.
+/// Build the `rf` binary and run `rf capabilities --json` under a frozen source
+/// epoch (so ts_iso and elapsed_ms are deterministic; request_id and data_hash
+/// are content-derived). Returns the captured envelope.
+fn capture_from_binary(root: &Path) -> Result<Value, String> {
     let status = Command::new(env!("CARGO"))
         .args(["build", "--quiet", "--bin", "rf"])
-        .current_dir(&root)
+        .current_dir(root)
         .status()
         .map_err(|e| format!("cargo build rf: {e}"))?;
     if !status.success() {
@@ -193,7 +224,7 @@ fn cmd_capture(check_only: bool) -> Result<(), String> {
     let out = Command::new(&bin)
         .args(["capabilities", "--json"])
         .env("SOURCE_DATE_EPOCH", "0")
-        .current_dir(&root)
+        .current_dir(root)
         .output()
         .map_err(|e| format!("run {}: {e}", bin.display()))?;
     if !out.status.success() {
@@ -202,32 +233,201 @@ fn cmd_capture(check_only: bool) -> Result<(), String> {
             out.status.code().unwrap_or(-1)
         ));
     }
-    let captured: Value = serde_json::from_slice(&out.stdout)
-        .map_err(|e| format!("captured output is not valid JSON: {e}"))?;
+    serde_json::from_slice(&out.stdout)
+        .map_err(|e| format!("captured output is not valid JSON: {e}"))
+}
 
-    if check_only {
-        let committed = read_json(&fixture_path)?;
-        let norm_fields: Vec<String> = registry["normalize_meta"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-            .unwrap_or_default();
-        if normalized(&captured, &norm_fields) == normalized(&committed, &norm_fields) {
-            println!("contract-guard: committed fixture is current (contract-equivalent to a fresh capture)");
-            Ok(())
-        } else {
-            Err(format!(
-                "committed fixture {fixture_rel} is STALE: a fresh capture differs. \
-                 Run `cargo xtask capture` and reconcile the docs."
-            ))
-        }
-    } else {
-        let mut text = serde_json::to_string_pretty(&captured)
-            .map_err(|e| format!("serialize: {e}"))?;
-        text.push('\n');
-        std::fs::write(&fixture_path, text)
-            .map_err(|e| format!("write {fixture_rel}: {e}"))?;
-        println!("contract-guard: rewrote {fixture_rel} from a fresh capture");
+/// Assert the committed fixture is contract-equivalent to a fresh capture from
+/// the binary being packaged. Non-printing; shared by `capture --check` and
+/// `preflight`.
+fn fixture_matches_binary() -> Result<(), String> {
+    let root = repo_root();
+    let registry = read_json(&root.join(REGISTRY))?;
+    let fixture_rel = registry["fixture"]
+        .as_str()
+        .ok_or("registry: missing string field `fixture`")?;
+    let captured = capture_from_binary(&root)?;
+    let committed = read_json(&root.join(fixture_rel))?;
+    let norm_fields: Vec<String> = registry["normalize_meta"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    if normalized(&captured, &norm_fields) == normalized(&committed, &norm_fields) {
         Ok(())
+    } else {
+        Err(format!(
+            "committed fixture {fixture_rel} is STALE: a fresh capture differs. \
+             Run `cargo xtask capture` and reconcile the docs."
+        ))
+    }
+}
+
+// ---- preflight (the publish stop-sign) -------------------------------------
+
+fn cmd_preflight() -> Result<(), String> {
+    println!("preflight: publish gate for crate `rf` (crates.io is write-once)");
+    let mut failures = 0usize;
+    let mut step = 0usize;
+    let mut report = |label: &str, res: Result<String, String>| {
+        step += 1;
+        match res {
+            Ok(note) => println!("  [{step}/4] PASS  {label} — {note}"),
+            Err(e) => {
+                failures += 1;
+                println!("  [{step}/4] FAIL  {label}");
+                for line in e.lines() {
+                    println!("            {line}");
+                }
+            }
+        }
+    };
+
+    // Run every gate (do not stop at the first failure) so one run surfaces
+    // everything that must be fixed before publishing.
+    report("worktree clean and committed", gate_worktree_clean());
+    report(
+        "committed fixture matches the binary",
+        fixture_matches_binary().map(|()| "a fresh capture equals the committed fixture".into()),
+    );
+    report(
+        "docs match the fixture (no stray blocks)",
+        check_docs_against_fixture().map(|n| format!("{n} claim(s) match; no stray GENERATED block")),
+    );
+    report(
+        "packaged files within the include allowlist",
+        packaged_within_allowlist(),
+    );
+
+    if failures == 0 {
+        println!("preflight: OK — every gate passed; safe to `cargo publish`");
+        Ok(())
+    } else {
+        Err(format!(
+            "{failures} gate(s) failed; do NOT `cargo publish` until each is green"
+        ))
+    }
+}
+
+/// Gate: the git worktree has no uncommitted changes. `cargo publish` packages
+/// the working tree, so an untidy tree could ship files that were never
+/// committed or reviewed.
+fn gate_worktree_clean() -> Result<String, String> {
+    let root = repo_root();
+    let out = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&root)
+        .output()
+        .map_err(|e| format!("run git status: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git status exited {}: {}",
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let listing = String::from_utf8_lossy(&out.stdout);
+    let dirty: Vec<&str> = listing.lines().filter(|l| !l.trim().is_empty()).collect();
+    if dirty.is_empty() {
+        Ok("no uncommitted changes".into())
+    } else {
+        Err(format!(
+            "{} uncommitted path(s); commit or stash before publishing:\n{}",
+            dirty.len(),
+            dirty.join("\n")
+        ))
+    }
+}
+
+/// Gate: every file `cargo package` would ship stays within the crate's include
+/// allowlist, so no guard tool, cargo config, test fixture, or CI file leaks
+/// into the published archive.
+fn packaged_within_allowlist() -> Result<String, String> {
+    let root = repo_root();
+    let out = Command::new(env!("CARGO"))
+        .args(["package", "--list", "--quiet"])
+        .current_dir(&root)
+        .output()
+        .map_err(|e| format!("run cargo package --list: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "cargo package --list failed:\n{}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let listing = String::from_utf8_lossy(&out.stdout);
+    let mut count = 0usize;
+    let mut stray: Vec<String> = Vec::new();
+    for f in listing.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        count += 1;
+        if !path_is_allowed(f) {
+            stray.push(f.to_string());
+        }
+    }
+    if stray.is_empty() {
+        Ok(format!("{count} file(s), all within the allowlist"))
+    } else {
+        Err(format!(
+            "{} packaged file(s) outside the allowlist (guard/config must not ship):\n{}",
+            stray.len(),
+            stray.join("\n")
+        ))
+    }
+}
+
+/// A packaged path is allowed if it is one of cargo's own generated metadata
+/// files, one of the top-level allowlisted docs, or a Rust source under `src/`.
+/// Mirrors the `include` list in Cargo.toml.
+fn path_is_allowed(p: &str) -> bool {
+    const CARGO_META: &[&str] = &[
+        "Cargo.toml",
+        "Cargo.toml.orig",
+        "Cargo.lock",
+        ".cargo_vcs_info.json",
+    ];
+    if CARGO_META.contains(&p) || matches!(p, "README.md" | "CHANGELOG.md" | "LICENSE") {
+        return true;
+    }
+    match p.strip_prefix("src/") {
+        Some(rest) => !rest.is_empty() && rest.ends_with(".rs"),
+        None => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_is_allowed;
+
+    #[test]
+    fn allowlist_admits_only_sources_docs_and_cargo_meta() {
+        for ok in [
+            "Cargo.toml",
+            "Cargo.toml.orig",
+            "Cargo.lock",
+            ".cargo_vcs_info.json",
+            "README.md",
+            "CHANGELOG.md",
+            "LICENSE",
+            "src/main.rs",
+            "src/verbs/find.rs",
+        ] {
+            assert!(path_is_allowed(ok), "should be allowed: {ok}");
+        }
+        for bad in [
+            "xtask/src/main.rs",
+            "xtask/Cargo.toml",
+            ".cargo/config.toml",
+            ".github/workflows/contract-guard.yml",
+            "tests/fixtures/contract/capabilities.rc.json",
+            "src/",
+            "src/notes.txt",
+            "deploy/build-and-deploy.sh",
+        ] {
+            assert!(!path_is_allowed(bad), "should be rejected: {bad}");
+        }
     }
 }
 
