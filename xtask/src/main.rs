@@ -4,10 +4,13 @@
 //!
 //!   cargo xtask check      assert every registered tier-P claim still equals
 //!                          its field in the committed release-candidate fixture,
-//!                          and that no crate surface carries an unrendered
-//!                          GENERATED block (the crate ships none by design).
+//!                          and that every GENERATED block on a crate surface has
+//!                          a known id (an unknown id has no renderer to keep it
+//!                          fresh and is rejected).
 //!   cargo xtask capture    re-run `rf capabilities --json` under a frozen source
-//!                          epoch and rewrite the committed fixture.
+//!                          epoch and rewrite the committed fixture, then re-render
+//!                          the README recovery example from the same binary so the
+//!                          doc's one live example stays a real capture.
 //!   cargo xtask capture --check
 //!                          re-capture into memory and assert the committed
 //!                          fixture is not stale (the pre-package CI gate),
@@ -19,9 +22,11 @@
 //!                          into lock step. Gates: (1) the worktree is clean and
 //!                          committed; (2) the committed fixture matches a fresh
 //!                          capture from the binary being packaged; (3) the docs
-//!                          match the fixture with no stray GENERATED block; (4)
+//!                          match the fixture with no unknown GENERATED block; (4)
 //!                          the packaged file list stays within the include
-//!                          allowlist, so no guard or config path enters the crate.
+//!                          allowlist, so no guard or config path enters the crate;
+//!                          (5) the README recovery example matches a fresh render
+//!                          from the binary, so the one live example is never stale.
 //!
 //! The registry (tests/fixtures/contract/coverage-registry.json) is the machine-
 //! readable successor to the prose coverage-matrix. Interpretive prose is not
@@ -36,6 +41,10 @@ use std::process::{Command, ExitCode};
 const REGISTRY: &str = "tests/fixtures/contract/coverage-registry.json";
 // Crate documentation surfaces scanned for stray GENERATED markers.
 const SURFACES: &[&str] = &["README.md", "CHANGELOG.md"];
+// GENERATED-block ids the crate tree is allowed to carry. Each must have a
+// renderer that keeps it fresh (see `capture`); the stray-block scan rejects
+// any id not on this list, so a block can never go stale with no renderer.
+const KNOWN_GENERATED: &[&str] = &["readme-example"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -157,20 +166,22 @@ fn check_docs_against_fixture() -> Result<usize, String> {
         }
     }
 
-    // The crate documentation tree carries no GENERATED blocks: the README defers
-    // every full contract table to `rf capabilities`. Assert that stays true, so
-    // a stray unrendered block cannot slip in without a renderer to keep it fresh.
+    // Every GENERATED block on a crate surface must have a known id, so it has a
+    // renderer that keeps it fresh. An unknown id is a block with nothing to
+    // regenerate it — reject it rather than let it go silently stale.
     for surface in SURFACES {
         let p = root.join(surface);
         if !p.exists() {
             continue;
         }
         let text = std::fs::read_to_string(&p).map_err(|e| format!("read {surface}: {e}"))?;
-        if text.contains("BEGIN GENERATED:") {
-            failures.push(format!(
-                "[{surface}] contains a GENERATED block, but the crate tree has no renderers; \
-                 move contract tables to the site tree or add a crate renderer"
-            ));
+        for id in generated_ids(&text) {
+            if !KNOWN_GENERATED.contains(&id.as_str()) {
+                failures.push(format!(
+                    "[{surface}] GENERATED block `{id}` has no renderer; add one and register \
+                     the id in KNOWN_GENERATED, or remove the block"
+                ));
+            }
         }
     }
 
@@ -205,6 +216,19 @@ fn cmd_capture(check_only: bool) -> Result<(), String> {
     text.push('\n');
     std::fs::write(&fixture_path, text).map_err(|e| format!("write {fixture_rel}: {e}"))?;
     println!("contract-guard: rewrote {fixture_rel} from a fresh capture");
+
+    // Regenerate the README recovery example from the same binary, so the doc's
+    // one live example stays a real capture and cannot drift from the fixture.
+    let readme_path = root.join("README.md");
+    let readme = std::fs::read_to_string(&readme_path).map_err(|e| format!("read README.md: {e}"))?;
+    let block = render_readme_example(&root)?;
+    let updated = replace_generated(&readme, "readme-example", &block)?;
+    if updated != readme {
+        std::fs::write(&readme_path, updated).map_err(|e| format!("write README.md: {e}"))?;
+        println!("contract-guard: regenerated the README readme-example block");
+    } else {
+        println!("contract-guard: README readme-example block already current");
+    }
     Ok(())
 }
 
@@ -212,14 +236,7 @@ fn cmd_capture(check_only: bool) -> Result<(), String> {
 /// epoch (so ts_iso and elapsed_ms are deterministic; request_id and data_hash
 /// are content-derived). Returns the captured envelope.
 fn capture_from_binary(root: &Path) -> Result<Value, String> {
-    let status = Command::new(env!("CARGO"))
-        .args(["build", "--quiet", "--bin", "rf"])
-        .current_dir(root)
-        .status()
-        .map_err(|e| format!("cargo build rf: {e}"))?;
-    if !status.success() {
-        return Err("cargo build rf failed".into());
-    }
+    build_rf(root)?;
     let bin = root.join("target/debug/rf");
     let out = Command::new(&bin)
         .args(["capabilities", "--json"])
@@ -235,6 +252,143 @@ fn capture_from_binary(root: &Path) -> Result<Value, String> {
     }
     serde_json::from_slice(&out.stdout)
         .map_err(|e| format!("captured output is not valid JSON: {e}"))
+}
+
+/// Build the `rf` binary once, in the debug profile the guard runs against.
+/// Shared by every gate that needs a fresh binary.
+fn build_rf(root: &Path) -> Result<(), String> {
+    let status = Command::new(env!("CARGO"))
+        .args(["build", "--quiet", "--bin", "rf"])
+        .current_dir(root)
+        .status()
+        .map_err(|e| format!("cargo build rf: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("cargo build rf failed".into())
+    }
+}
+
+// ---- README recovery example ----------------------------------------------
+
+/// Render the README recovery example from a real run of the binary, so the
+/// documented output is a capture and not hand-typed. Builds `rf`, lays down the
+/// three-file recovery case (a tracked file, a hidden dotfile, a gitignored
+/// file) in a throwaway git tree, runs `rf content timeout . --human` under a
+/// frozen epoch, and returns the full fenced block for the readme-example
+/// markers (the `$ rf content timeout .` prompt line plus the render).
+fn render_readme_example(root: &Path) -> Result<String, String> {
+    build_rf(root)?;
+    let bin = root.join("target/debug/rf");
+    let tree = make_sample_tree()?;
+    let result = Command::new(&bin)
+        .args(["content", "timeout", ".", "--human"])
+        .env("SOURCE_DATE_EPOCH", "0")
+        .env("NO_COLOR", "1")
+        .current_dir(&tree)
+        .output()
+        .map_err(|e| format!("run rf content: {e}"));
+    std::fs::remove_dir_all(&tree).ok();
+    let out = result?;
+    if !out.status.success() {
+        return Err(format!(
+            "rf content exited {}",
+            out.status.code().unwrap_or(-1)
+        ));
+    }
+    let rendered = String::from_utf8(out.stdout).map_err(|e| format!("rf output not UTF-8: {e}"))?;
+    let body = rendered.trim_end_matches('\n');
+    Ok(format!("```\n$ rf content timeout .\n{body}\n```"))
+}
+
+/// Lay down the README's three-file recovery case in a fresh temp dir, inside a
+/// git repo so the vcs_ignore classification is live. Returns the tree root; the
+/// caller removes it.
+fn make_sample_tree() -> Result<PathBuf, String> {
+    let dir = std::env::temp_dir().join(format!(
+        "rf-readme-example-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(dir.join("cache")).map_err(|e| format!("mkdir sample tree: {e}"))?;
+    let init = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&dir)
+        .status()
+        .map_err(|e| format!("git init: {e}"))?;
+    if !init.success() {
+        std::fs::remove_dir_all(&dir).ok();
+        return Err("git init failed in sample tree".into());
+    }
+    let files = [
+        ("config.py", "timeout = 30\n"),
+        (".env.local", "timeout = 5      # hidden\n"),
+        ("cache/build.py", "timeout = 999    # gitignored\n"),
+        (".gitignore", "cache/\n"),
+    ];
+    for (name, contents) in files {
+        std::fs::write(dir.join(name), contents).map_err(|e| format!("write {name}: {e}"))?;
+    }
+    Ok(dir)
+}
+
+// ---- GENERATED-marker helpers ----------------------------------------------
+
+fn begin_marker(id: &str) -> String {
+    format!("<!-- BEGIN GENERATED:{id} -->")
+}
+
+fn end_marker(id: &str) -> String {
+    format!("<!-- END GENERATED:{id} -->")
+}
+
+/// Return the body between the BEGIN/END markers for `id`, excluding the marker
+/// lines and the single newline bounding the body on each side. None if the
+/// block is absent or malformed.
+fn extract_generated<'a>(text: &'a str, id: &str) -> Option<&'a str> {
+    let begin = begin_marker(id);
+    let end = end_marker(id);
+    let after_begin = text.find(&begin)? + begin.len();
+    let body_start = after_begin + text[after_begin..].starts_with('\n').then_some(1)?;
+    let estart = text[body_start..].find(&end)? + body_start;
+    let body_end = text[..estart].strip_suffix('\n')?.len();
+    Some(&text[body_start..body_end])
+}
+
+/// Replace the body between the markers for `id` with `body`, preserving the
+/// marker lines. Errors if either marker is absent.
+fn replace_generated(text: &str, id: &str, body: &str) -> Result<String, String> {
+    let begin = begin_marker(id);
+    let end = end_marker(id);
+    let after_begin =
+        text.find(&begin).ok_or_else(|| format!("BEGIN marker for `{id}` not found"))? + begin.len();
+    let estart = text[after_begin..]
+        .find(&end)
+        .ok_or_else(|| format!("END marker for `{id}` not found"))?
+        + after_begin;
+    Ok(format!("{}\n{body}\n{}", &text[..after_begin], &text[estart..]))
+}
+
+/// Every GENERATED-block id present in `text`, in order of appearance.
+fn generated_ids(text: &str) -> Vec<String> {
+    const NEEDLE: &str = "BEGIN GENERATED:";
+    let mut ids = Vec::new();
+    let mut rest = text;
+    while let Some(i) = rest.find(NEEDLE) {
+        let after = &rest[i + NEEDLE.len()..];
+        let id = after
+            .split([' ', '\n', '\r', '\t'])
+            .next()
+            .unwrap_or("");
+        if !id.is_empty() {
+            ids.push(id.to_string());
+        }
+        rest = after;
+    }
+    ids
 }
 
 /// Assert the committed fixture is contract-equivalent to a fresh capture from
@@ -275,10 +429,10 @@ fn cmd_preflight() -> Result<(), String> {
     let mut report = |label: &str, res: Result<String, String>| {
         step += 1;
         match res {
-            Ok(note) => println!("  [{step}/4] PASS  {label} — {note}"),
+            Ok(note) => println!("  [{step}/5] PASS  {label} — {note}"),
             Err(e) => {
                 failures += 1;
-                println!("  [{step}/4] FAIL  {label}");
+                println!("  [{step}/5] FAIL  {label}");
                 for line in e.lines() {
                     println!("            {line}");
                 }
@@ -300,6 +454,10 @@ fn cmd_preflight() -> Result<(), String> {
     report(
         "packaged files within the include allowlist",
         packaged_within_allowlist(),
+    );
+    report(
+        "README example matches the binary",
+        readme_example_fresh(),
     );
 
     if failures == 0 {
@@ -397,9 +555,29 @@ fn path_is_allowed(p: &str) -> bool {
     }
 }
 
+/// Gate: the README recovery example equals a fresh render from the binary.
+/// crates.io ships the README verbatim and write-once, so an example that no
+/// longer matches real output would mislead every reader of the published page.
+fn readme_example_fresh() -> Result<String, String> {
+    let root = repo_root();
+    let readme = root.join("README.md");
+    let text = std::fs::read_to_string(&readme).map_err(|e| format!("read README.md: {e}"))?;
+    let committed = extract_generated(&text, "readme-example")
+        .ok_or("README.md has no readme-example GENERATED block")?;
+    let fresh = render_readme_example(&root)?;
+    if committed == fresh {
+        Ok("the documented example equals a fresh run".into())
+    } else {
+        Err(format!(
+            "README example is STALE; run `cargo xtask capture` to regenerate it.\n\
+             --- committed ---\n{committed}\n--- fresh ---\n{fresh}"
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::path_is_allowed;
+    use super::{extract_generated, generated_ids, path_is_allowed, replace_generated};
 
     #[test]
     fn allowlist_admits_only_sources_docs_and_cargo_meta() {
@@ -428,6 +606,45 @@ mod tests {
         ] {
             assert!(!path_is_allowed(bad), "should be rejected: {bad}");
         }
+    }
+
+    const SAMPLE: &str =
+        "pre\n<!-- BEGIN GENERATED:readme-example -->\nold body\nline2\n<!-- END GENERATED:readme-example -->\npost\n";
+
+    #[test]
+    fn extract_returns_body_without_marker_lines() {
+        assert_eq!(extract_generated(SAMPLE, "readme-example"), Some("old body\nline2"));
+    }
+
+    #[test]
+    fn extract_absent_block_is_none() {
+        assert_eq!(extract_generated("no markers here", "readme-example"), None);
+    }
+
+    #[test]
+    fn replace_preserves_surroundings_and_round_trips() {
+        let updated = replace_generated(SAMPLE, "readme-example", "new body\nnew line2").unwrap();
+        assert!(updated.starts_with("pre\n"));
+        assert!(updated.ends_with("post\n"));
+        assert_eq!(
+            extract_generated(&updated, "readme-example"),
+            Some("new body\nnew line2")
+        );
+    }
+
+    #[test]
+    fn replace_errors_when_marker_absent() {
+        assert!(replace_generated("no markers", "readme-example", "x").is_err());
+    }
+
+    #[test]
+    fn generated_ids_lists_hyphenated_ids_in_order() {
+        let text = "<!-- BEGIN GENERATED:readme-example -->\nx\n<!-- END GENERATED:readme-example -->\n\
+                    <!-- BEGIN GENERATED:exit-codes-table -->\ny\n<!-- END GENERATED:exit-codes-table -->\n";
+        assert_eq!(
+            generated_ids(text),
+            vec!["readme-example".to_string(), "exit-codes-table".to_string()]
+        );
     }
 }
 

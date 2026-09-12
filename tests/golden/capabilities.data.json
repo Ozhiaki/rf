@@ -68,6 +68,14 @@
       "type": "bool"
     },
     {
+      "aliases": [],
+      "arity": 0,
+      "name": "--human",
+      "positions": "before or after a verb",
+      "summary": "force the human render even when stdout is not a terminal; --json wins if both are given",
+      "type": "bool"
+    },
+    {
       "aliases": [
         "-h"
       ],
@@ -184,10 +192,27 @@
         ]
       },
       "robot-docs": {
-        "aliases": [], "flags": [], "path": ["robot-docs"], "positionals": []
+        "aliases": [],
+        "flags": [],
+        "path": [
+          "robot-docs"
+        ],
+        "positionals": []
       },
       "robot-docs guide": {
-        "aliases": [], "flags": [{"aliases": [], "arity": 0, "name": "--compact"}], "path": ["robot-docs", "guide"], "positionals": []
+        "aliases": [],
+        "flags": [
+          {
+            "aliases": [],
+            "arity": 0,
+            "name": "--compact"
+          }
+        ],
+        "path": [
+          "robot-docs",
+          "guide"
+        ],
+        "positionals": []
       }
     },
     "global_flags": [
@@ -197,6 +222,11 @@
         ],
         "arity": 0,
         "name": "--help"
+      },
+      {
+        "aliases": [],
+        "arity": 0,
+        "name": "--human"
       },
       {
         "aliases": [],
@@ -234,13 +264,6 @@
       "rejected": ".config"
     }
   ],
-  "verification_fixtures": {
-    "content_find_warnings_paging_and_conflicts": "tests/conformance.rs::conformance",
-    "envelope_and_parser_errors": "tests/conformance.rs::error_envelopes_and_global_json_are_total",
-    "history_outcomes": "find::history_tests::history_outcomes_are_distinct_and_coverage_is_counted",
-    "release_self_check_failure": "src/conformance.rs::run",
-    "totality_exit_6": "tests/conformance.rs::fault_seam_proves_totality"
-  },
   "verbs": {
     "capabilities": {
       "aliases": [],
@@ -319,10 +342,6 @@
           "selection": "selected when a selected-input mode is used",
           "surfaced_by": "enum[default,vcs_ignore,hidden,binary,case,encoding_utf16]"
         },
-        "meta.selection": {
-          "mode": "enum[root-walk,stdin-nul,rf-envelope]",
-          "selected_files": "int when selected input is used"
-        },
         "meta.pagination": {
           "cursor": "string|null",
           "has_more": "bool",
@@ -331,6 +350,10 @@
           "snapshot_hash": "sha256",
           "total": "int",
           "truncated": "bool"
+        },
+        "meta.selection": {
+          "mode": "enum[root-walk,stdin-nul,rf-envelope]",
+          "selected_files": "int when selected input is used"
         }
       },
       "selected_input": {
@@ -352,25 +375,6 @@
       ],
       "flags": [],
       "summary": "environment DIAGNOSE: engine build, regex features, and the active ignore mode for a path"
-    },
-    "robot-docs": {
-      "aliases": [],
-      "flags": [],
-      "subcommands": {
-        "guide": {
-          "flags": [
-            {"arity": 0, "name": "--compact", "type": "bool"}
-          ],
-          "output_schema": {"data[]": {"command": "safe shell command", "expected_branch": "string", "goal": "string", "id": "string", "inputs": "array[string]", "version_range": "string"}}
-        }
-      },
-      "summary": "agent workflow documents"
-    },
-    "robot-docs guide": {
-      "aliases": [],
-      "flags": [{"arity": 0, "name": "--compact", "type": "bool"}],
-      "output_schema": {"data[]": {"command": "safe shell command", "expected_branch": "string", "goal": "string", "id": "string", "inputs": "array[string]", "version_range": "string"}},
-      "summary": "emit agent workflow recipes"
     },
     "find": {
       "aliases": [],
@@ -445,7 +449,61 @@
         }
       },
       "summary": "staged fd|rg pipe (in-process) + typed Git history coverage + ast-grep structural; attributes each miss to fd_name/fd_hidden/fd_ignore/rg_binary/git_deleted/ast_structural"
+    },
+    "robot-docs": {
+      "aliases": [],
+      "flags": [],
+      "subcommands": {
+        "guide": {
+          "flags": [
+            {
+              "arity": 0,
+              "name": "--compact",
+              "type": "bool"
+            }
+          ],
+          "output_schema": {
+            "data[]": {
+              "command": "safe shell command",
+              "expected_branch": "string",
+              "goal": "string",
+              "id": "string",
+              "inputs": "array[string]",
+              "version_range": "string"
+            }
+          }
+        }
+      },
+      "summary": "agent workflow documents"
+    },
+    "robot-docs guide": {
+      "aliases": [],
+      "flags": [
+        {
+          "arity": 0,
+          "name": "--compact",
+          "type": "bool"
+        }
+      ],
+      "output_schema": {
+        "data[]": {
+          "command": "safe shell command",
+          "expected_branch": "string",
+          "goal": "string",
+          "id": "string",
+          "inputs": "array[string]",
+          "version_range": "string"
+        }
+      },
+      "summary": "emit agent workflow recipes"
     }
+  },
+  "verification_fixtures": {
+    "content_find_warnings_paging_and_conflicts": "tests/conformance.rs::conformance",
+    "envelope_and_parser_errors": "tests/conformance.rs::error_envelopes_and_global_json_are_total",
+    "history_outcomes": "find::history_tests::history_outcomes_are_distinct_and_coverage_is_counted",
+    "release_self_check_failure": "src/conformance.rs::run",
+    "totality_exit_6": "tests/conformance.rs::fault_seam_proves_totality"
   },
   "warning_codes": [
     "IGNORE_VCS",

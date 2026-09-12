@@ -70,6 +70,7 @@ pub fn build() -> Value {
         "global_flags": [
             {"name": "--json", "aliases": [], "arity": 0, "type": "bool", "positions": "before or after a verb", "summary": "machine envelope"},
             {"name": "--no-color", "aliases": [], "arity": 0, "type": "bool", "positions": "before or after a verb", "summary": "disable terminal decoration"},
+            {"name": "--human", "aliases": [], "arity": 0, "type": "bool", "positions": "before or after a verb", "summary": "force the human render even when stdout is not a terminal; --json wins if both are given"},
             {"name": "--help", "aliases": ["-h"], "arity": 0, "type": "bool", "summary": "usage text; exit 0"},
             {"name": "--version", "aliases": ["-V"], "arity": 0, "type": "bool", "summary": "version string; exit 0"}
         ],

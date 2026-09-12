@@ -64,17 +64,19 @@ cache/build.py     timeout = 999    # gitignored
 Plain ripgrep finds one of the three. `rf` finds all three and names the filter
 that hid each:
 
+<!-- BEGIN GENERATED:readme-example -->
 ```
 $ rf content timeout .
 content 'timeout' in .: 3 file(s), 1 by default, 2 hidden by filters
+  default      config.py
   hidden       .env.local
   vcs_ignore   cache/build.py
-  default      config.py
   ! IGNORE_VCS: 1 match(es) hidden by default; add -u (ignore .gitignore/.ignore rules)
   ! HIDDEN_SKIPPED: 1 match(es) hidden by default; add -uu (also search hidden/dotfiles)
-  $ rg -u -e 'timeout' -- '.'
-  $ rg -uu -e 'timeout' -- '.'
+  $ 'rg' '-u' '-e' 'timeout' '--' '.'
+  $ 'rg' '-uu' '-e' 'timeout' '--' '.'
 ```
+<!-- END GENERATED:readme-example -->
 
 Piped or with `--json`, the same result is one structured envelope:
 
@@ -82,9 +84,9 @@ Piped or with `--json`, the same result is one structured envelope:
 {
   "ok": true,
   "data": [
+    { "file": "config.py",      "surfaced_by": "default" },
     { "file": ".env.local",     "surfaced_by": "hidden" },
-    { "file": "cache/build.py", "surfaced_by": "vcs_ignore" },
-    { "file": "config.py",      "surfaced_by": "default" }
+    { "file": "cache/build.py", "surfaced_by": "vcs_ignore" }
   ],
   "meta": { "matched_files": 3, "default_matched_files": 1, "hidden_by_filters": 2 }
 }

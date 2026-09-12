@@ -14,7 +14,7 @@ that ships is in lock step.
 cargo xtask preflight
 ```
 
-It runs four gates and fails if any one does not hold:
+It runs five gates and fails if any one does not hold:
 
 1. **Worktree clean and committed.** `cargo publish` packages the working tree,
    so any uncommitted change could ship un-reviewed. The tree must be clean.
@@ -23,13 +23,17 @@ It runs four gates and fails if any one does not hold:
    identical (contract-equivalent) to that fresh output. If the code's contract
    changed, this fails until the fixture is recaptured.
 3. **The docs match the fixture.** Every registered contract fact still equals
-   its fixture field, and no documentation surface carries a stray, unrendered
-   generated block.
+   its fixture field, and every generated block on a doc surface has a known id
+   (an id with no renderer to keep it fresh is rejected).
 4. **Packaged files stay within the allowlist.** Every file `cargo package`
    would ship is a source file, an allowlisted doc, or cargo's own metadata — so
    no guard tool, cargo config, test fixture, or CI file leaks into the archive.
+5. **The README example matches the binary.** It renders the recovery example
+   from a real run of the freshly built binary and confirms the committed block
+   in `README.md` is byte-identical. A hand-edit that drifts from real output
+   fails this gate.
 
-Green on all four means the published version's docs will describe exactly what
+Green on all five means the published version's docs will describe exactly what
 its binary does.
 
 ## Release steps
@@ -57,7 +61,7 @@ its binary does.
 ## What the stop sign does not yet cover
 
 - **Interpretive prose** (the explanatory text around the generated tables) is
-  human-reviewed, not machine-checked. Read it when the contract changes.
-- **The README example block** is still hand-written (see issue rf-327). Until it
-  is generated from the fixture like the site tables, confirm by eye that the
-  example output in `README.md` matches a real run of the version being shipped.
+  human-reviewed, not machine-checked. Read it when the contract changes. This
+  includes the hand-written `--json` envelope beside the README recovery example:
+  gate 5 regenerates the human render, but the JSON snippet next to it stays
+  hand-kept, so re-read it when the `content` output shape changes.

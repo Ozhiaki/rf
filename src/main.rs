@@ -34,6 +34,11 @@ struct Cli {
     /// the accepted global flag is part of the stable parser contract.
     #[arg(long = "no-color", global = true)]
     no_color: bool,
+    /// Force the human-readable render even when stdout is not a terminal (the
+    /// mirror of --json). Use it to save or page the human output. --json wins
+    /// if both are given.
+    #[arg(long, global = true)]
+    human: bool,
     #[command(subcommand)]
     verb: Verb,
 }
@@ -101,11 +106,25 @@ enum Verb {
 enum RobotDocs { Guide { #[arg(long)] compact: bool } }
 
 fn bootstrap_json() -> bool {
-    // This scan is deliberately lexical and stops at `--`: a later `--json` is
-    // data, not a global option. It decides the error-rendering mode before
-    // clap can reject malformed argv.
-    std::env::args().skip(1).take_while(|a| a != "--").any(|a| a == "--json")
-        || !std::io::stdout().is_terminal()
+    // This scan is deliberately lexical and stops at `--`: a later `--json` or
+    // `--human` is data, not a global option. It decides the render mode before
+    // clap can reject malformed argv. Precedence: --json (machine) wins over
+    // --human (human); with neither, a real terminal gets the human render.
+    let (mut json, mut human) = (false, false);
+    for a in std::env::args().skip(1).take_while(|a| a != "--") {
+        match a.as_str() {
+            "--json" => json = true,
+            "--human" => human = true,
+            _ => {}
+        }
+    }
+    if json {
+        true
+    } else if human {
+        false
+    } else {
+        !std::io::stdout().is_terminal()
+    }
 }
 
 fn dispatch(v: &Verb) -> (Value, i32) {
