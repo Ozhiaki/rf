@@ -25,12 +25,11 @@ include = [
     "/Cargo.lock",
 ]
 
-# The root package is also the workspace root. `xtask` is an internal build-
-# automation member (the contract guardrail); it is excluded from the published
-# archive by the include-list above and by cargo's normalization, which strips
-# this [workspace] table from the packaged manifest.
+# The root package is the sole workspace member. The contract guardrail is no
+# longer an in-repo member: it is `plumbline` (https://github.com/rgfind/plumbline),
+# invoked by name as `plumb`, configured by `plumbline.json`. cargo strips this
+# [workspace] table from the packaged manifest.
 [workspace]
-members = ["xtask"]
 resolver = "2"
 
 [[bin]]

@@ -1,11 +1,11 @@
 # Crate coverage matrix (SUPERSEDED)
 
 This hand-maintained prose matrix is superseded by the machine-readable
-[`coverage-registry.json`](./coverage-registry.json) and the guard that runs it
-(`cargo xtask check`). The registry pins every tier-P contract fact to a field in
-`capabilities.rc.json`; the guard asserts agreement on every push and pull request
-and before packaging. The promise "the docs agree with the binary" is now a check,
-not a document.
+`plumbline.json` (at the repo root) and the guard that runs it (`plumb check`,
+from [`plumbline`](https://github.com/rgfind/plumbline)). The config pins every
+tier-P contract fact to a field in `capabilities.rc.json`; the guard asserts
+agreement on every push and pull request and before packaging. The promise "the
+docs agree with the binary" is now a check, not a document.
 
 The defects this matrix enumerated (CD1–CD5) were resolved before the 0.0.5
 publish:

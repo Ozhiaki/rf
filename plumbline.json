@@ -1,7 +1,61 @@
 {
-  "$comment": "Machine-readable coverage registry for the crate documentation tree (README.md, CHANGELOG.md). Supersedes the prose coverage-matrix.md. Every tier-P contract fact the crate prose depends on is pinned here to a field in the committed release-candidate fixture. The guard (cargo xtask check) asserts each fact still equals its fixture field; a re-capture that drifts the contract fails the check and flags the prose for human review. Interpretive prose (the recovery narrative, the who-it's-for framing) is NOT registered: it is human-review, unchecked by construction. Only tier-P facts (values an agent branches on) are registered; tier-M reproducibility/correlation fields are excluded. See closing note in coverage-matrix.superseded.md.",
+  "$comment": "plumbline config for crate `rf` (see https://github.com/rgfind/plumbline). Read by `plumb check|capture|preflight`. Supersedes coverage-registry.json: the same tier-P claims are pinned here, plus how to build/capture the binary, which doc surfaces carry generated blocks, and the packaged-file allowlist source. This file is dev tooling config; it is excluded from the published crate by the Cargo.toml include allowlist, exactly as xtask was.",
+  "capture": {
+    "build": [
+      "cargo",
+      "build",
+      "--quiet",
+      "--bin",
+      "rf"
+    ],
+    "command": [
+      "rf",
+      "capabilities",
+      "--json"
+    ],
+    "env": {
+      "SOURCE_DATE_EPOCH": "0"
+    }
+  },
   "fixture": "tests/fixtures/contract/capabilities.rc.json",
-  "normalize_meta": ["request_id", "ts_iso", "data_hash", "elapsed_ms"],
+  "normalize_meta": [
+    "request_id",
+    "ts_iso",
+    "data_hash",
+    "elapsed_ms"
+  ],
+  "surfaces": [
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "generated": [
+    {
+      "id": "readme-example",
+      "surface": "README.md",
+      "render": [
+        "rf",
+        "content",
+        "timeout",
+        ".",
+        "--human"
+      ],
+      "env": {
+        "SOURCE_DATE_EPOCH": "0",
+        "NO_COLOR": "1"
+      },
+      "prompt": "$ rf content timeout .",
+      "tree": {
+        "git_init": true,
+        "files": {
+          "config.py": "timeout = 30\n",
+          ".env.local": "timeout = 5      # hidden\n",
+          "cache/build.py": "timeout = 999    # gitignored\n",
+          ".gitignore": "cache/\n"
+        }
+      }
+    }
+  ],
+  "package_allowlist": "cargo-include",
   "claims": [
     {
       "id": "contract_version",
@@ -28,7 +82,15 @@
       "fact": "envelope carries exactly seven top-level keys",
       "fixture_path": "",
       "mode": "keys",
-      "expected": ["commands", "data", "errors", "meta", "ok", "tool_version", "warnings"],
+      "expected": [
+        "commands",
+        "data",
+        "errors",
+        "meta",
+        "ok",
+        "tool_version",
+        "warnings"
+      ],
       "surface": "README.md",
       "section": "The control surface",
       "tier": "P"
@@ -38,7 +100,15 @@
       "fact": "seven released verbs",
       "fixture_path": "data.0.verbs",
       "mode": "keys",
-      "expected": ["capabilities", "conformance", "content", "doctor", "find", "robot-docs", "robot-docs guide"],
+      "expected": [
+        "capabilities",
+        "conformance",
+        "content",
+        "doctor",
+        "find",
+        "robot-docs",
+        "robot-docs guide"
+      ],
       "surface": "README.md",
       "section": "The pipeline case / control surface",
       "tier": "P"
@@ -48,7 +118,13 @@
       "fact": "five exit codes 0,1,3,5,6",
       "fixture_path": "data.0.exit_codes",
       "mode": "keys",
-      "expected": ["0", "1", "3", "5", "6"],
+      "expected": [
+        "0",
+        "1",
+        "3",
+        "5",
+        "6"
+      ],
       "surface": "README.md",
       "section": "The control surface",
       "tier": "P"
@@ -68,7 +144,19 @@
       "fact": "eleven stable error codes",
       "fixture_path": "data.0.error_codes",
       "mode": "keys",
-      "expected": ["BAD_PATTERN", "CONFLICT", "CONFORMANCE_FAIL", "HISTORY_ERROR", "INTERNAL", "INVALID_INPUT", "INVALID_SELECTION", "MISSING_ARGUMENT", "UNKNOWN_COMMAND", "UNKNOWN_FLAG", "USAGE"],
+      "expected": [
+        "BAD_PATTERN",
+        "CONFLICT",
+        "CONFORMANCE_FAIL",
+        "HISTORY_ERROR",
+        "INTERNAL",
+        "INVALID_INPUT",
+        "INVALID_SELECTION",
+        "MISSING_ARGUMENT",
+        "UNKNOWN_COMMAND",
+        "UNKNOWN_FLAG",
+        "USAGE"
+      ],
       "surface": "README.md",
       "section": "control surface (defers to capabilities)",
       "tier": "P"
@@ -78,7 +166,24 @@
       "fact": "sixteen warning codes",
       "fixture_path": "data.0.warning_codes",
       "mode": "set",
-      "expected": ["AST_STRUCTURAL", "BINARY_SKIPPED", "CASE_SENSITIVE", "ENCODING_MISS", "FD_HIDDEN", "FD_IGNORE", "FD_NAME", "GIT_ABSENT", "GIT_DELETED", "GIT_HISTORY_PARTIAL", "GIT_NOT_WORK_TREE", "HIDDEN_SKIPPED", "IGNORE_MODE", "IGNORE_VCS", "RG_BINARY", "STRUCTURAL_UNAVAILABLE"],
+      "expected": [
+        "AST_STRUCTURAL",
+        "BINARY_SKIPPED",
+        "CASE_SENSITIVE",
+        "ENCODING_MISS",
+        "FD_HIDDEN",
+        "FD_IGNORE",
+        "FD_NAME",
+        "GIT_ABSENT",
+        "GIT_DELETED",
+        "GIT_HISTORY_PARTIAL",
+        "GIT_NOT_WORK_TREE",
+        "HIDDEN_SKIPPED",
+        "IGNORE_MODE",
+        "IGNORE_VCS",
+        "RG_BINARY",
+        "STRUCTURAL_UNAVAILABLE"
+      ],
       "surface": "README.md",
       "section": "control surface (defers to capabilities)",
       "tier": "P"

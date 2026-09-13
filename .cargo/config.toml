@@ -1,4 +1,0 @@
-# Repo-root alias so the guardrail is invoked as `cargo xtask <cmd>` from
-# anywhere in the workspace. The xtask member is internal and never published.
-[alias]
-xtask = "run --quiet --package xtask --"

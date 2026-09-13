@@ -4,14 +4,22 @@ crates.io is **write-once**: once a version is published, its README, metadata,
 and code can never be changed for that version. So the documentation and the
 code must agree **at the exact moment of publishing** — not before, not after.
 
-The single rule: **never run `cargo publish` unless `cargo xtask preflight`
+The single rule: **never run `cargo publish` unless `plumb preflight`
 exits 0.** The preflight is the stop sign. It refuses to pass unless everything
 that ships is in lock step.
+
+The guard is [`plumbline`](https://github.com/rgfind/plumbline), an installed
+CLI invoked as `plumb` (not an in-repo tool). Install it once, then it reads
+`plumbline.json` at the repo root:
+
+```sh
+cargo install --git https://github.com/rgfind/plumbline.git plumbline --locked
+```
 
 ## The one command
 
 ```sh
-cargo xtask preflight
+plumb preflight
 ```
 
 It runs five gates and fails if any one does not hold:
@@ -39,13 +47,13 @@ its binary does.
 ## Release steps
 
 1. Land all code and doc changes for the version. If the contract changed, run
-   `cargo xtask capture` to recapture the fixture, reconcile the docs against it,
+   `plumb capture` to recapture the fixture, reconcile the docs against it,
    and commit.
 2. Bump the version in `Cargo.toml`; update `CHANGELOG.md`. Commit.
 3. Run the stop sign:
 
    ```sh
-   cargo xtask preflight
+   plumb preflight
    ```
 
    Fix anything it reports. Do not continue until it prints
